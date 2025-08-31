@@ -1,0 +1,3 @@
+# Exclui o arquivo de variáveis de ambiente do controle de versão
+.env
+node_modules

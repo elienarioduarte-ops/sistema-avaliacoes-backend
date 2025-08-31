@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Avaliação Online</title>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      :root {
+        --primary-color: #5a7dff;
+        --secondary-color: #8faaff;
+        --accent-color: #17c3b2;
+        --text-color: #f0f2f5;
+        --card-bg: rgba(30, 39, 50, 0.85);
+        --hover-effect: rgba(90, 125, 255, 0.2);
+        --success-color: #00b894;
+        --danger-color: #ff6b6b;
+        --form-color: #5a7dff;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        background: linear-gradient(135deg, #2c3e50, #1a1a2e);
+        color: var(--text-color);
+        min-height: 100vh;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .form-container {
+        max-width: 800px;
+        width: 100%;
+        background: var(--card-bg);
+        border-radius: 15px;
+        padding: 30px;
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        animation: fadeIn 0.5s ease;
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      h1,
+      h2,
+      h3 {
+        color: var(--secondary-color);
+        margin-bottom: 20px;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      label {
+        font-weight: bold;
+        color: var(--accent-color);
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.2);
+        color: var(--text-color);
+        font-size: 1rem;
+      }
+
+      .question-item {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+      }
+
+      .question-item h4 {
+        margin-top: 0;
+      }
+
+      .options-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .option-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 8px 15px;
+        border-radius: 20px;
+        transition: background 0.2s;
+        cursor: pointer;
+      }
+
+      .option-item:hover {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      .option-item input[type="radio"] {
+        accent-color: var(--primary-color);
+        transform: scale(1.2);
+      }
+
+      button {
+        width: 100%;
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 15px 25px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1.1rem;
+        font-weight: bold;
+        transition: background 0.3s ease, transform 0.2s ease;
+      }
+
+      button:hover {
+        background: var(--accent-color);
+        transform: translateY(-2px);
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="form-content" class="form-container hidden">
+      <h1 id="form-title"></h1>
+      <p id="form-description"></p>
+
+      <form id="online-assessment-form">
+        <div id="name-group" class="form-group hidden">
+          <label for="student-name">Seu Nome Completo</label>
+          <input
+            type="text"
+            id="student-name"
+            required
+            placeholder="Digite seu nome completo"
+          />
+        </div>
+
+        <div id="questions-container"></div>
+
+        <button type="submit" id="submit-btn">Enviar Respostas</button>
+      </form>
+    </div>
+
+    <div id="results-content" class="form-container hidden">
+      <h2>Obrigado por responder!</h2>
+      <p>Sua nota foi calculada:</p>
+      <h1 id="final-score"></h1>
+      <div id="results-details"></div>
+    </div>
+
+    <div id="error-content" class="form-container hidden">
+      <h2 style="color: var(--danger-color)">Erro!</h2>
+      <p>Não foi possível carregar a avaliação ou você já a preencheu.</p>
+      <p>
+        Por favor, verifique se o link está correto ou entre em contato com o
+        professor.
+      </p>
+    </div>
+
+    <script>
+      const formContent = document.getElementById("form-content");
+      const resultsContent = document.getElementById("results-content");
+      const errorContent = document.getElementById("error-content");
+      const submitBtn = document.getElementById("submit-btn");
+
+      let currentAssessment, answerKey;
+
+      document.addEventListener("DOMContentLoaded", () => {
+        const params = new URLSearchParams(window.location.search);
+        const formId = params.get("form");
+
+        if (!formId) {
+          showError("Link de formulário inválido.");
+          return;
+        }
+
+        const parentLocalStorage = window.opener?.localStorage;
+
+        if (!parentLocalStorage) {
+          showError(
+            "Não foi possível carregar os dados. Abra o formulário a partir da página principal do sistema de avaliações."
+          );
+          return;
+        }
+
+        const storedData = parentLocalStorage.getItem("onlineForm");
+        if (!storedData) {
+          showError(
+            "Não foi possível carregar a avaliação. O link pode ter expirado ou foi apagado."
+          );
+          return;
+        }
+
+        const formData = JSON.parse(storedData);
+        currentAssessment = formData.assessment;
+        answerKey = JSON.parse(parentLocalStorage.getItem("answerKey"));
+
+        if (!currentAssessment || !answerKey) {
+          showError("Dados da avaliação ou gabarito ausentes.");
+          return;
+        }
+
+        const hasAnswered = localStorage.getItem(`answered_${formId}`);
+        if (hasAnswered) {
+          showError("Você já respondeu a esta avaliação.");
+          return;
+        }
+
+        renderForm(formData);
+
+        document
+          .getElementById("online-assessment-form")
+          .addEventListener("submit", handleSubmit);
+      });
+
+      function renderForm(formData) {
+        document.getElementById("form-title").textContent = formData.title;
+        document.getElementById("form-description").textContent =
+          formData.description;
+        if (formData.requireName) {
+          document.getElementById("name-group").classList.remove("hidden");
+        }
+
+        const questionsContainer = document.getElementById(
+          "questions-container"
+        );
+        questionsContainer.innerHTML = "";
+
+        formData.assessment.questions.forEach((question) => {
+          const questionDiv = document.createElement("div");
+          questionDiv.className = "question-item";
+          questionDiv.innerHTML = `
+                    <h4>Questão ${question.number} - ${question.subject}</h4>
+                    <div class="options-container">
+                        <label class="option-item"><input type="radio" name="q-${question.number}" value="A"> A</label>
+                        <label class="option-item"><input type="radio" name="q-${question.number}" value="B"> B</label>
+                        <label class="option-item"><input type="radio" name="q-${question.number}" value="C"> C</label>
+                        <label class="option-item"><input type="radio" name="q-${question.number}" value="D"> D</label>
+                        <label class="option-item"><input type="radio" name="q-${question.number}" value="E"> E</label>
+                    </div>
+                `;
+          questionsContainer.appendChild(questionDiv);
+        });
+        formContent.classList.remove("hidden");
+      }
+
+      function handleSubmit(e) {
+        e.preventDefault();
+
+        const studentName =
+          document.getElementById("student-name")?.value.trim() || "Anônimo";
+        const answers = [];
+        let allAnswered = true;
+
+        for (let i = 1; i <= currentAssessment.questionsCount; i++) {
+          const selectedAnswer = document.querySelector(
+            `input[name="q-${i}"]:checked`
+          );
+          if (!selectedAnswer) {
+            allAnswered = false;
+            break;
+          }
+          const answer = selectedAnswer.value;
+          const correctAnswer = answerKey.find(
+            (k) => k.questionNumber === i
+          )?.correctAnswer;
+          const isCorrect = answer === correctAnswer;
+          answers.push({
+            questionNumber: i,
+            answer,
+            isCorrect,
+            subject: currentAssessment.questions.find((q) => q.number === i)
+              .subject,
+          });
+        }
+
+        if (!allAnswered) {
+          alert("Por favor, responda a todas as questões.");
+          return;
+        }
+
+        const parentLocalStorage = window.opener?.localStorage;
+        if (parentLocalStorage) {
+          const studentAnswers =
+            JSON.parse(parentLocalStorage.getItem("studentAnswers")) || [];
+          studentAnswers.push({ studentName, answers });
+          parentLocalStorage.setItem(
+            "studentAnswers",
+            JSON.stringify(studentAnswers)
+          );
+        }
+
+        const params = new URLSearchParams(window.location.search);
+        localStorage.setItem(`answered_${params.get("form")}`, "true");
+
+        displayResults(studentName, answers);
+      }
+
+      function displayResults(studentName, answers) {
+        formContent.classList.add("hidden");
+        resultsContent.classList.remove("hidden");
+
+        const correctCount = answers.filter((a) => a.isCorrect).length;
+        const score = (correctCount / answers.length) * 100;
+
+        document.getElementById("final-score").textContent = `${score.toFixed(
+          1
+        )}%`;
+
+        const resultsDetails = document.getElementById("results-details");
+        resultsDetails.innerHTML = `<h3>Detalhes do seu desempenho:</h3>`;
+
+        answers.forEach((answer) => {
+          resultsDetails.innerHTML += `
+                    <p><strong>Questão ${answer.questionNumber} (${
+            answer.subject
+          }):</strong> Sua resposta foi ${answer.answer}. Gabarito: ${
+            answerKey.find((k) => k.questionNumber === answer.questionNumber)
+              ?.correctAnswer
+          }. ${
+            answer.isCorrect
+              ? '<span style="color: var(--success-color);">Correta</span>'
+              : '<span style="color: var(--danger-color);">Incorreta</span>'
+          }</p>
+                `;
+        });
+      }
+
+      function showError(message) {
+        formContent.classList.add("hidden");
+        resultsContent.classList.add("hidden");
+        document.getElementById("error-content").classList.remove("hidden");
+        document.querySelector("#error-content p:first-of-type").textContent =
+          message;
+      }
+    </script>
+  </body>
+</html>
