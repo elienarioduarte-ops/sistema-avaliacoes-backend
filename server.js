@@ -6,23 +6,22 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 
 // 2. Carrega as variáveis de ambiente do arquivo .env
+// No Render, as variáveis são carregadas automaticamente, então esta linha é para uso local.
 dotenv.config();
 
 const app = express();
-const port = 3000;
 
-// 3. Obtém a string de conexão da variável de ambiente
-const mongoURI = process.env.MONGO_URI;
+// A porta é lida da variável de ambiente do Render, com um fallback para 3000 em uso local.
+const port = process.env.PORT || 3000;
+
+// 3. Obtém a string de conexão da variável de ambiente corrigida
+const mongoURI = process.env.MONGODB_URI;
 
 // 4. Lógica de conexão com o banco de dados
 const connectDB = async () => {
   try {
-    await mongoose.connect(mongoURI, {
-      // Essas opções não são mais necessárias a partir do Mongoose 6,
-      // mas são úteis para versões mais antigas.
-      // useNewUrlParser: true,
-      // useUnifiedTopology: true,
-    });
+    // A string de conexão agora usa a variável correta.
+    await mongoose.connect(mongoURI);
     console.log("Conexão com o MongoDB estabelecida!");
   } catch (error) {
     console.error("Erro ao conectar ao MongoDB:", error.message);
