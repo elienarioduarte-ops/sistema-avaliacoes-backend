@@ -1,10 +1,7 @@
 {
   "name": "sistema-avaliacoes-backend",
   "version": "1.0.0",
-  "description": "",
-  {
-  "name": "sistema-avaliacoes-backend",
-  "version": "1.0.0",
+  "description": "Backend para sistema de avaliações",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js"
