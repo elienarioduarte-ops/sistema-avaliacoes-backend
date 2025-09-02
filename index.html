@@ -774,13 +774,12 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
     <script>
       // === Variáveis Globais e Instâncias de Gráficos ===
       let currentAssessment = null;
-      let answerKey = null;
+      let answerKey = null; // array de {questionNumber, correctAnswer, subject}
       let studentAnswers = [];
       let onlineFormLink = "";
       let questionChartInstance, subjectChartInstance, studentChartInstance;
 
-      // URL base da sua API
-      // Quando estiver online, substitua 'http://localhost:3000' pela URL do seu servidor
+      // URL base da sua API (PROD)
       const API_URL = "https://api.fisicaava.online";
 
       // === Elementos do DOM ===
@@ -836,8 +835,9 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const data = await response.json();
 
           currentAssessment = data.assessment;
+          // no backend, /all-data retorna answerKey já como array (answers) ou null
           answerKey = data.answerKey;
-          studentAnswers = data.studentAnswers;
+          studentAnswers = data.studentAnswers || [];
         } catch (error) {
           console.error("Erro ao carregar dados iniciais:", error);
           // Permite o uso da página mesmo sem o backend conectado
@@ -932,9 +932,9 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const questionDiv = document.createElement("div");
           questionDiv.className = "form-group";
           questionDiv.innerHTML = `
-                    <label for="question-${i}">Questão ${i} - Assunto</label>
-                    <input type="text" id="question-${i}" required placeholder="Ex: Matemática Básica">
-                `;
+            <label for="question-${i}">Questão ${i} - Assunto</label>
+            <input type="text" id="question-${i}" required placeholder="Ex: Matemática Básica">
+          `;
           questionsContainer.appendChild(questionDiv);
         }
       }
@@ -975,7 +975,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             updateDashboardCards();
             showSection("dashboard");
           } else {
-            alert(`Erro: ${newAssessment.error}`);
+            alert(`Erro: ${newAssessment.error || "Falha ao criar avaliação"}`);
           }
         } catch (error) {
           alert("Erro ao conectar com o servidor.");
@@ -995,16 +995,16 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const keyDiv = document.createElement("div");
           keyDiv.className = "form-group";
           keyDiv.innerHTML = `
-                    <label for="key-${question.number}">Questão ${question.number} - ${question.subject}</label>
-                    <select id="key-${question.number}" required>
-                        <option value="">Selecione a alternativa correta</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        <option value="E">E</option>
-                    </select>
-                `;
+            <label for="key-${question.number}">Questão ${question.number} - ${question.subject}</label>
+            <select id="key-${question.number}" required>
+              <option value="">Selecione a alternativa correta</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+            </select>
+          `;
           keyContainer.appendChild(keyDiv);
           if (answerKey) {
             const savedKey = answerKey.find(
@@ -1050,12 +1050,13 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const newKey = await response.json();
 
           if (response.ok) {
+            // /answer-keys retorna apenas o array de answers
             answerKey = newKey;
             alert("Gabarito salvo com sucesso!");
             updateDashboardCards();
             showSection("dashboard");
           } else {
-            alert(`Erro: ${newKey.error}`);
+            alert(`Erro: ${newKey.error || "Falha ao salvar gabarito"}`);
           }
         } catch (error) {
           alert("Erro ao conectar com o servidor.");
@@ -1076,16 +1077,16 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const answerDiv = document.createElement("div");
           answerDiv.className = "form-group";
           answerDiv.innerHTML = `
-                    <label for="answer-${question.number}">Questão ${question.number} - ${question.subject}</label>
-                    <select id="answer-${question.number}" required>
-                        <option value="">Selecione a alternativa</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        <option value="E">E</option>
-                    </select>
-                `;
+            <label for="answer-${question.number}">Questão ${question.number} - ${question.subject}</label>
+            <select id="answer-${question.number}" required>
+              <option value="">Selecione a alternativa</option>
+              <option value="A">A</option>
+              <option value="B">B</option>
+              <option value="C">C</option>
+              <option value="D">D</option>
+              <option value="E">E</option>
+            </select>
+          `;
           answersContainer.appendChild(answerDiv);
         });
       }
@@ -1151,7 +1152,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             renderStudentsList();
             updateDashboardCards();
           } else {
-            alert(`Erro: ${newStudent.error}`);
+            alert(`Erro: ${newStudent.error || "Falha ao salvar respostas"}`);
           }
         } catch (error) {
           alert("Erro ao conectar com o servidor.");
@@ -1175,15 +1176,15 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const studentCard = document.createElement("div");
           studentCard.className = "student-card";
           studentCard.innerHTML = `
-                    <h4>${student.studentName}</h4>
-                    <p>Acertos: ${correctAnswers}/${totalQuestions}</p>
-                    <p>Nota: ${score.toFixed(1)}%</p>
-                    <span class="status-badge ${
-                      score >= 60 ? "status-correct" : "status-wrong"
-                    }">
-                        ${score >= 60 ? "Aprovado" : "Reprovado"}
-                    </span>
-                `;
+            <h4>${student.studentName}</h4>
+            <p>Acertos: ${correctAnswers}/${totalQuestions}</p>
+            <p>Nota: ${score.toFixed(1)}%</p>
+            <span class="status-badge ${
+              score >= 60 ? "status-correct" : "status-wrong"
+            }">
+              ${score >= 60 ? "Aprovado" : "Reprovado"}
+            </span>
+          `;
           studentsList.appendChild(studentCard);
         });
       }
@@ -1229,7 +1230,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
               formLinkContainer.style.display = "none";
               formPreviewContainer.innerHTML = "";
             } else {
-              alert(`Erro: ${result.error}`);
+              alert(`Erro: ${result.error || "Falha ao limpar dados"}`);
             }
           } catch (error) {
             alert("Erro ao conectar com o servidor.");
@@ -1251,100 +1252,94 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         reportElement.style.color = "black";
         reportElement.style.fontFamily = "Arial, sans-serif";
         reportElement.innerHTML = `
-                <h1 style="text-align: center; color: var(--primary-color);">Relatório de Avaliação</h1>
-                <h2 style="color: var(--primary-color);">${
-                  currentAssessment.name
-                }</h2>
-                <p><strong>Data do relatório:</strong> ${new Date().toLocaleDateString()}</p>
-                <p><strong>Total de alunos:</strong> ${
-                  studentAnswers.length
-                }</p>
-                <p><strong>Total de questões:</strong> ${
-                  currentAssessment.questionsCount
-                }</p>
+          <h1 style="text-align: center; color: var(--primary-color);">Relatório de Avaliação</h1>
+          <h2 style="color: var(--primary-color);">${
+            currentAssessment.name
+          }</h2>
+          <p><strong>Data do relatório:</strong> ${new Date().toLocaleDateString()}</p>
+          <p><strong>Total de alunos:</strong> ${studentAnswers.length}</p>
+          <p><strong>Total de questões:</strong> ${
+            currentAssessment.questionsCount
+          }</p>
 
-                <h3 style="color: var(--primary-color); margin-top: 20px;">Desempenho Geral</h3>
-                <div style="display: flex; justify-content: space-between; margin-top: 15px;">
-                    <div style="flex: 1; padding: 10px; background: #f1f2f6; border-radius: 5px; margin: 5px;">
-                        <h4>Média da Turma</h4>
-                        <p style="font-size: 24px; font-weight: bold;">${calculateAverageScore().toFixed(
-                          1
-                        )}%</p>
-                    </div>
-                    <div style="flex: 1; padding: 10px; background: #f1f2f6; border-radius: 5px; margin: 5px;">
-                        <h4>Maior Nota</h4>
-                        <p style="font-size: 24px; font-weight: bold;">${calculateMaxScore().toFixed(
-                          1
-                        )}%</p>
-                    </div>
-                    <div style="flex: 1; padding: 10px; background: #f1f2f6; border-radius: 5px; margin: 5px;">
-                        <h4>Menor Nota</h4>
-                        <p style="font-size: 24px; font-weight: bold;">${calculateMinScore().toFixed(
-                          1
-                        )}%</p>
-                    </div>
-                </div>
+          <h3 style="color: var(--primary-color); margin-top: 20px;">Desempenho Geral</h3>
+          <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+            <div style="flex: 1; padding: 10px; background: #f1f2f6; border-radius: 5px; margin: 5px;">
+              <h4>Média da Turma</h4>
+              <p style="font-size: 24px; font-weight: bold;">${calculateAverageScore().toFixed(
+                1
+              )}%</p>
+            </div>
+            <div style="flex: 1; padding: 10px; background: #f1f2f6; border-radius: 5px; margin: 5px;">
+              <h4>Maior Nota</h4>
+              <p style="font-size: 24px; font-weight: bold;">${calculateMaxScore().toFixed(
+                1
+              )}%</p>
+            </div>
+            <div style="flex: 1; padding: 10px; background: #f1f2f6; border-radius: 5px; margin: 5px;">
+              <h4>Menor Nota</h4>
+              <p style="font-size: 24px; font-weight: bold;">${calculateMinScore().toFixed(
+                1
+              )}%</p>
+            </div>
+          </div>
 
-                <h3 style="color: var(--primary-color); margin-top: 20px;">Top 5 Alunos</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background: var(--primary-color); color: white;">
-                            <th style="padding: 10px; text-align: left;">Posição</th>
-                            <th style="padding: 10px; text-align: left;">Aluno</th>
-                            <th style="padding: 10px; text-align: left;">Nota</th>
-                            <th style="padding: 10px; text-align: left;">Acertos</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${getTopStudents(5)
-                          .map(
-                            (student, index) => `
-                            <tr style="border-bottom: 1px solid #ddd;">
-                                <td style="padding: 10px;">${index + 1}º</td>
-                                <td style="padding: 10px;">${
-                                  student.studentName
-                                }</td>
-                                <td style="padding: 10px;">${student.score.toFixed(
-                                  1
-                                )}%</td>
-                                <td style="padding: 10px;">${
-                                  student.correctAnswers
-                                }/${currentAssessment.questionsCount}</td>
-                            </tr>
-                        `
-                          )
-                          .join("")}
-                    </tbody>
-                </table>
+          <h3 style="color: var(--primary-color); margin-top: 20px;">Top 5 Alunos</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+              <tr style="background: var(--primary-color); color: white;">
+                <th style="padding: 10px; text-align: left;">Posição</th>
+                <th style="padding: 10px; text-align: left;">Aluno</th>
+                <th style="padding: 10px; text-align: left;">Nota</th>
+                <th style="padding: 10px; text-align: left;">Acertos</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${getTopStudents(5)
+                .map(
+                  (student, index) => `
+                    <tr style="border-bottom: 1px solid #ddd;">
+                      <td style="padding: 10px;">${index + 1}º</td>
+                      <td style="padding: 10px;">${student.studentName}</td>
+                      <td style="padding: 10px;">${student.score.toFixed(
+                        1
+                      )}%</td>
+                      <td style="padding: 10px;">${student.correctAnswers}/${
+                    currentAssessment.questionsCount
+                  }</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
 
-                <h3 style="color: var(--primary-color); margin-top: 20px;">Desempenho por Questão</h3>
-                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-                    <thead>
-                        <tr style="background: var(--primary-color); color: white;">
-                            <th style="padding: 10px; text-align: left;">Questão</th>
-                            <th style="padding: 10px; text-align: left;">Assunto</th>
-                            <th style="padding: 10px; text-align: left;">Taxa de Acerto</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${calculateQuestionPerformance()
-                          .map(
-                            (question, index) => `
-                            <tr style="border-bottom: 1px solid #ddd;">
-                                <td style="padding: 10px;">${index + 1}</td>
-                                <td style="padding: 10px;">${
-                                  question.subject
-                                }</td>
-                                <td style="padding: 10px;">${question.accuracy.toFixed(
-                                  1
-                                )}%</td>
-                            </tr>
-                        `
-                          )
-                          .join("")}
-                    </tbody>
-                </table>
-            `;
+          <h3 style="color: var(--primary-color); margin-top: 20px;">Desempenho por Questão</h3>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+              <tr style="background: var(--primary-color); color: white;">
+                <th style="padding: 10px; text-align: left;">Questão</th>
+                <th style="padding: 10px; text-align: left;">Assunto</th>
+                <th style="padding: 10px; text-align: left;">Taxa de Acerto</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${calculateQuestionPerformance()
+                .map(
+                  (question, index) => `
+                    <tr style="border-bottom: 1px solid #ddd;">
+                      <td style="padding: 10px;">${index + 1}</td>
+                      <td style="padding: 10px;">${question.subject}</td>
+                      <td style="padding: 10px;">${question.accuracy.toFixed(
+                        1
+                      )}%</td>
+                    </tr>
+                  `
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `;
 
         document.body.appendChild(reportElement);
 
@@ -1387,57 +1382,52 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         const topStudents = getTopStudents(studentAnswers.length);
 
         rankingContainer.innerHTML = `
-                <h3>Ranking de Desempenho</h3>
-                <table class="ranking-table">
-                    <thead>
-                        <tr>
-                            <th>Posição</th>
-                            <th>Aluno</th>
-                            <th>Nota</th>
-                            <th>Acertos</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${topStudents
-                          .map((student, index) => {
-                            let medal = "";
-                            if (index === 0)
-                              medal = '<span class="medal gold">1º</span>';
-                            else if (index === 1)
-                              medal = '<span class="medal silver">2º</span>';
-                            else if (index === 2)
-                              medal = '<span class="medal bronze">3º</span>';
-                            else medal = `<span>${index + 1}º</span>`;
+          <h3>Ranking de Desempenho</h3>
+          <table class="ranking-table">
+            <thead>
+              <tr>
+                <th>Posição</th>
+                <th>Aluno</th>
+                <th>Nota</th>
+                <th>Acertos</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${topStudents
+                .map((student, index) => {
+                  let medal = "";
+                  if (index === 0) medal = '<span class="medal gold">1º</span>';
+                  else if (index === 1)
+                    medal = '<span class="medal silver">2º</span>';
+                  else if (index === 2)
+                    medal = '<span class="medal bronze">3º</span>';
+                  else medal = `<span>${index + 1}º</span>`;
 
-                            return `
-                                <tr>
-                                    <td>${medal}</td>
-                                    <td>${student.studentName}</td>
-                                    <td>${student.score.toFixed(1)}%</td>
-                                    <td>${student.correctAnswers}/${
-                              currentAssessment.questionsCount
-                            }</td>
-                                    <td>
-                                        <span class="status-badge ${
-                                          student.score >= 60
-                                            ? "status-correct"
-                                            : "status-wrong"
-                                        }">
-                                            ${
-                                              student.score >= 60
-                                                ? "Aprovado"
-                                                : "Reprovado"
-                                            }
-                                        </span>
-                                    </td>
-                                </tr>
-                            `;
-                          })
-                          .join("")}
-                    </tbody>
-                </table>
-            `;
+                  return `
+                    <tr>
+                      <td>${medal}</td>
+                      <td>${student.studentName}</td>
+                      <td>${student.score.toFixed(1)}%</td>
+                      <td>${student.correctAnswers}/${
+                    currentAssessment.questionsCount
+                  }</td>
+                      <td>
+                        <span class="status-badge ${
+                          student.score >= 60
+                            ? "status-correct"
+                            : "status-wrong"
+                        }">
+                          ${student.score >= 60 ? "Aprovado" : "Reprovado"}
+                        </span>
+                      </td>
+                    </tr>
+                  `;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        `;
       }
 
       // === Funções de Cálculo Auxiliares ===
@@ -1657,24 +1647,24 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           studentDetail.className = "student-card";
           studentDetail.style.marginBottom = "20px";
           studentDetail.innerHTML = `
-                    <h4>${student.studentName} - Nota: ${score.toFixed(1)}%</h4>
-                    <p>Acertos: ${correctAnswers}/${
+            <h4>${student.studentName} - Nota: ${score.toFixed(1)}%</h4>
+            <p>Acertos: ${correctAnswers}/${
             currentAssessment.questionsCount
           }</p>
-                    <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;">
-                `;
+            <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px;">
+          `;
 
           for (let i = 1; i <= currentAssessment.questionsCount; i++) {
             const answer = student.answers.find((a) => a.questionNumber === i);
             studentDetail.innerHTML += `
-                        <div style="width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; background: ${
-                          answer?.isCorrect
-                            ? "var(--success-color)"
-                            : "var(--danger-color)"
-                        }; font-size: 0.8rem;">
-                            ${i}
-                        </div>
-                    `;
+              <div style="width: 30px; height: 30px; border-radius: 5px; display: flex; align-items: center; justify-content: center; background: ${
+                answer?.isCorrect
+                  ? "var(--success-color)"
+                  : "var(--danger-color)"
+              }; font-size: 0.8rem;">
+                ${i}
+              </div>
+            `;
           }
 
           studentDetail.innerHTML += `</div>`;
@@ -1682,8 +1672,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         });
       }
 
-      // === Formulário Online (Mock) ===
-      function generateOnlineForm() {
+      // === Formulário Online (AGORA usa a API real) ===
+      async function generateOnlineForm() {
         if (!currentAssessment) {
           alert('Primeiro crie uma avaliação na seção "Criar Avaliação".');
           return;
@@ -1693,8 +1683,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           return;
         }
 
-        // A lógica de criar o formulário e salvá-lo agora é no backend.
-        // O frontend apenas gera o link para o formulário no backend
         const formTitle =
           document.getElementById("form-title").value || "Avaliação Online";
         const formDescription =
@@ -1703,85 +1691,111 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         const requireName =
           document.getElementById("form-require-name").value === "yes";
 
-        const formInfo = {
-          assessmentId: currentAssessment._id,
-          title: formTitle,
-          description: formDescription,
-          requireName: requireName,
-        };
+        try {
+          const resp = await fetch(`${API_URL}/forms`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              assessmentId: currentAssessment._id,
+              title: formTitle,
+              description: formDescription,
+              requireName: requireName,
+            }),
+          });
 
-        // Simulação de criação do formulário no backend para obter um ID real.
-        const formId = Math.random().toString(36).substring(2, 15);
-        onlineFormLink = `${API_URL}/form/${formId}`;
-        formLink.value = onlineFormLink;
-        formLinkContainer.style.display = "block";
+          const data = await resp.json();
 
-        renderFormPreview(formInfo);
+          if (!resp.ok) {
+            alert(
+              `Erro ao criar formulário: ${data?.error || "Falha inesperada"}`
+            );
+            return;
+          }
 
-        alert("Formulário online criado! Compartilhe o link com seus alunos.");
+          onlineFormLink = data.url; // URL pública do formulário gerado no backend
+          formLink.value = onlineFormLink;
+          formLinkContainer.style.display = "block";
+
+          // Pré-visualização local (só para orientar o professor)
+          renderFormPreview({
+            title: formTitle,
+            description: formDescription,
+            requireName,
+          });
+
+          alert(
+            "Formulário online criado! Compartilhe o link com seus alunos."
+          );
+        } catch (e) {
+          console.error(e);
+          alert("Erro ao conectar com o servidor.");
+        }
       }
 
       function renderFormPreview(formData) {
+        if (!currentAssessment) return;
+
         formPreviewContainer.innerHTML = `
-                <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 8px;">
-                    <h2>${formData.title}</h2>
-                    <p>${formData.description}</p>
+          <div style="background: rgba(255,255,255,0.05); padding: 20px; border-radius: 8px;">
+            <h2>${formData.title}</h2>
+            <p>${formData.description || ""}</p>
 
-                    ${
-                      formData.requireName
-                        ? `
-                        <div class="form-group">
-                            <label for="preview-student-name">Nome do Aluno</label>
-                            <input type="text" id="preview-student-name" placeholder="Digite seu nome completo">
-                        </div>
-                    `
-                        : ""
-                    }
+            ${
+              formData.requireName
+                ? `
+              <div class="form-group">
+                <label for="preview-student-name">Nome do Aluno</label>
+                <input type="text" id="preview-student-name" placeholder="Digite seu nome completo" />
+              </div>
+            `
+                : `
+              <p><em>Este formulário não exige nome (será enviado como “Anônimo”).</em></p>
+            `
+            }
 
-                    <div class="form-preview-questions">
-                        ${currentAssessment.questions
+            <div class="form-preview-questions">
+              ${currentAssessment.questions
+                .map(
+                  (question) => `
+                    <div class="question-preview">
+                      <h4>Questão ${question.number} - ${question.subject}</h4>
+                      <p>Selecione a alternativa:</p>
+                      <div class="options-container">
+                        ${["A", "B", "C", "D", "E"]
                           .map(
-                            (question) => `
-                            <div class="question-preview">
-                                <h4>Questão ${question.number} - ${question.subject}</h4>
-                                <p>Selecione a alternativa:</p>
-                                <div class="options-container">
-                                    <div class="option-item">
-                                        <input type="radio" name="question-${question.number}" id="preview-q${question.number}-a" value="A">
-                                        <label for="preview-q${question.number}-a">A</label>
-                                    </div>
-                                    <div class="option-item">
-                                        <input type="radio" name="question-${question.number}" id="preview-q${question.number}-b" value="B">
-                                        <label for="preview-q${question.number}-b">B</label>
-                                    </div>
-                                    <div class="option-item">
-                                        <input type="radio" name="question-${question.number}" id="preview-q${question.number}-c" value="C">
-                                        <label for="preview-q${question.number}-c">C</label>
-                                    </div>
-                                    <div class="option-item">
-                                        <input type="radio" name="question-${question.number}" id="preview-q${question.number}-d" value="D">
-                                        <label for="preview-q${question.number}-d">D</label>
-                                    </div>
-                                    <div class="option-item">
-                                        <input type="radio" name="question-${question.number}" id="preview-q${question.number}-e" value="E">
-                                        <label for="preview-q${question.number}-e">E</label>
-                                    </div>
-                                </div>
-                            </div>
-                        `
+                            (letter) => `
+                              <div class="option-item">
+                                <input type="radio" disabled name="question-${question.number}" value="${letter}">
+                                <label>${letter}</label>
+                              </div>
+                            `
                           )
                           .join("")}
+                      </div>
                     </div>
+                  `
+                )
+                .join("")}
+            </div>
 
-                    <button style="margin-top: 20px;">Enviar Respostas</button>
-                </div>
-            `;
+            <p style="margin-top:12px"><strong>Envio real:</strong> os alunos vão responder na página pública do formulário: <a href="${onlineFormLink}" target="_blank">${onlineFormLink}</a></p>
+          </div>
+        `;
       }
 
-      function copyFormLink() {
-        formLink.select();
-        document.execCommand("copy");
-        alert("Link copiado para a área de transferência!");
+      async function copyFormLink() {
+        try {
+          if (!onlineFormLink) return;
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(onlineFormLink);
+          } else {
+            formLink.select();
+            document.execCommand("copy");
+          }
+          alert("Link copiado para a área de transferência!");
+        } catch {
+          alert("Não foi possível copiar o link.");
+        }
       }
     </script>
   </body>
