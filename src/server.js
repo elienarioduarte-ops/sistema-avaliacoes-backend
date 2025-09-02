@@ -8,20 +8,30 @@ const path = require("path");
 
 const app = express();
 
-// ====== CONFIGURAÇÃO BÁSICA ======
+/* =========================
+   CONFIGURAÇÕES BÁSICAS
+   ========================= */
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+// Parse JSON primeiro
+app.use(express.json({ limit: "1mb" }));
+
+/* =========================
+   C O R S  (ANTES DAS ROTAS)
+   ========================= */
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// CORS (permite também localhost para desenvolvimento)
+// Política: permite requisições sem Origin (curl/healthcheck),
+// permite localhost (dev) e as origens informadas na env.
 app.use(
   cors({
-    origin: function (origin, cb) {
-      if (!origin) return cb(null, true); // tools/curl
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
       if (
         allowedOrigins.includes(origin) ||
         /^https?:\/\/localhost(:\d+)?$/.test(origin)
@@ -31,13 +41,18 @@ app.use(
       return cb(new Error("Not allowed by CORS"));
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: false,
+    optionsSuccessStatus: 204,
   })
 );
 
-app.use(express.json({ limit: "1mb" }));
+// Responde preflight para qualquer rota
+app.options("*", cors());
 
-// ====== CONEXÃO AO MONGO ======
+/* =========================
+   CONEXÃO AO MONGODB
+   ========================= */
 mongoose
   .connect(MONGODB_URI, { autoIndex: true })
   .then(() => console.log("✅ MongoDB conectado"))
@@ -46,7 +61,9 @@ mongoose
     process.exit(1);
   });
 
-// ====== SCHEMAS & MODELS ======
+/* =========================
+   SCHEMAS & MODELS
+   ========================= */
 const QuestionSchema = new mongoose.Schema(
   {
     number: Number,
@@ -127,7 +144,9 @@ const FormSchema = new mongoose.Schema(
 );
 const Form = mongoose.model("Form", FormSchema);
 
-// ====== HELPERS ======
+/* =========================
+   HELPERS
+   ========================= */
 async function getLatestAssessmentBundle() {
   const assessment = await Assessment.findOne().sort({ createdAt: -1 }).lean();
   if (!assessment)
@@ -153,14 +172,16 @@ function recomputeIsCorrect(answers, keyMap) {
   }));
 }
 
-// ====== ROTAS ======
+/* =========================
+   ROTAS
+   ========================= */
 
 // Healthcheck
 app.get("/health", (req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
 );
 
-// 1) Retornar o “estado atual” (última avaliação criada)
+// Estado atual (última avaliação)
 app.get("/all-data", async (req, res) => {
   try {
     const bundle = await getLatestAssessmentBundle();
@@ -171,7 +192,7 @@ app.get("/all-data", async (req, res) => {
   }
 });
 
-// 2) Criar avaliação
+// Criar avaliação
 app.post("/assessments", async (req, res) => {
   try {
     const { name, questionsCount, questions } = req.body;
@@ -195,7 +216,7 @@ app.post("/assessments", async (req, res) => {
   }
 });
 
-// 3) Salvar gabarito
+// Salvar gabarito
 app.post("/answer-keys", async (req, res) => {
   try {
     const { assessmentId, answers } = req.body;
@@ -214,7 +235,7 @@ app.post("/answer-keys", async (req, res) => {
   }
 });
 
-// 4) Salvar respostas de um aluno (recomputa isCorrect no backend)
+// Salvar respostas de um aluno (recomputa isCorrect no backend)
 app.post("/student-answers", async (req, res) => {
   try {
     const { assessmentId, studentName, answers } = req.body;
@@ -222,7 +243,6 @@ app.post("/student-answers", async (req, res) => {
       return res.status(400).json({ error: "Dados de respostas inválidos." });
     }
 
-    // pega gabarito
     const keyDoc = await AnswerKey.findOne({ assessmentId })
       .sort({ createdAt: -1 })
       .lean();
@@ -251,7 +271,7 @@ app.post("/student-answers", async (req, res) => {
   }
 });
 
-// 5) Limpar todos os dados
+// Limpar todos os dados
 app.delete("/clear-data", async (req, res) => {
   try {
     await Promise.all([
@@ -267,7 +287,7 @@ app.delete("/clear-data", async (req, res) => {
   }
 });
 
-// 6) Criar formulário online
+// Criar formulário online
 app.post("/forms", async (req, res) => {
   try {
     const { assessmentId, title, description, requireName } = req.body;
@@ -279,7 +299,7 @@ app.post("/forms", async (req, res) => {
       return res.status(404).json({ error: "Avaliação não encontrada." });
 
     // formId curto e único
-    const formId = crypto.randomBytes(6).toString("base64url"); // ex.: "k9D1xQeQ"
+    const formId = crypto.randomBytes(6).toString("base64url");
     const form = await Form.create({
       formId,
       assessmentId,
@@ -297,7 +317,7 @@ app.post("/forms", async (req, res) => {
   }
 });
 
-// 7) Página pública do formulário (HTML simples)
+// Página pública do formulário (HTML simples)
 app.get("/form/:formId", async (req, res) => {
   try {
     const form = await Form.findOne({ formId: req.params.formId }).lean();
@@ -305,12 +325,11 @@ app.get("/form/:formId", async (req, res) => {
 
     const assessment = await Assessment.findById(form.assessmentId).lean();
     const keyDoc = await AnswerKey.findOne({
-      assessmentId: assessment._id,
+      assessmentId: assessment?._id,
     }).lean();
     if (!assessment || !keyDoc)
       return res.status(400).send("Formulário incompleto.");
 
-    // Render HTML básico (self-contained)
     const questions = assessment.questions
       .map(
         (q) => `
@@ -363,7 +382,7 @@ app.get("/form/:formId", async (req, res) => {
   }
 });
 
-// 8) Receber submissão do formulário público
+// Receber submissão do formulário público
 app.post(
   "/form/:formId/submit",
   express.urlencoded({ extended: true }),
@@ -389,7 +408,6 @@ app.post(
         .trim()
         .replace(/\s+/g, " ");
 
-      // monta answers a partir do body
       const answers = assessment.questions.map((q) => {
         const val = (req.body[`q${q.number}`] || "").toString();
         const answer = ["A", "B", "C", "D", "E"].includes(val) ? val : "";
@@ -401,7 +419,6 @@ app.post(
         };
       });
 
-      // validação simples
       if (answers.some((a) => !a.answer)) {
         return res.status(400).send("Preencha todas as questões.");
       }
@@ -426,7 +443,9 @@ app.post(
   }
 );
 
-// ====== START ======
+/* =========================
+   START
+   ========================= */
 app.listen(PORT, () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
 });
