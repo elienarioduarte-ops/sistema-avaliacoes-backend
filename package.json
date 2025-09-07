@@ -1,20 +1,27 @@
 {
   "name": "sistema-avaliacoes-backend",
   "version": "1.0.0",
-  "main": "server.js",
-  "type": "commonjs",
+  "description": "Backend do sistema de avaliações com login, cadastro e perfis (aluno/professor).",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
   },
+  "keywords": [],
+  "author": "Elienario",
+  "license": "MIT",
   "engines": {
-    "node": "18.x"
+    "node": ">=18"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.5.0"
+    "mongoose": "^8.6.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }
