@@ -1,6 +1,5 @@
 // server.js
 require("dotenv").config();
-
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -12,15 +11,16 @@ const jwt = require("jsonwebtoken");
 const app = express();
 
 /* =========================
-   CONFIG
+   CONFIGURAÇÕES BÁSICAS
    ========================= */
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-const JWT_SECRET = process.env.JWT_SECRET || "troque-isto";
+const JWT_SECRET = process.env.JWT_SECRET || "changeme";
 
-// JSON parser
+/* Body parsers */
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true }));
 
 /* =========================
    C O R S
@@ -33,8 +33,7 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
 app.use(
   cors({
     origin: (origin, cb) => {
-      // permite sem Origin (curl/healthcheck), localhost e envs
-      if (!origin) return cb(null, true);
+      if (!origin) return cb(null, true); // curl/healthcheck
       if (
         allowedOrigins.includes(origin) ||
         /^https?:\/\/localhost(:\d+)?$/.test(origin)
@@ -52,12 +51,18 @@ app.use(
 app.options("*", cors());
 
 /* =========================
-   STATIC (public/)
+   ARQUIVOS ESTÁTICOS
    ========================= */
 app.use(express.static(path.join(__dirname, "public")));
+app.use(
+  "/assets",
+  express.static(path.join(__dirname, "public", "assets"), {
+    fallthrough: true,
+  })
+);
 
 /* =========================
-   DB
+   CONEXÃO AO MONGODB
    ========================= */
 mongoose
   .connect(MONGODB_URI, { autoIndex: true })
@@ -70,32 +75,37 @@ mongoose
 /* =========================
    SCHEMAS & MODELS
    ========================= */
+// Usuários
 const UserSchema = new mongoose.Schema(
   {
-    name: String,
-    email: { type: String, unique: true, index: true, required: true },
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, index: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ["aluno", "professor"], default: null }, // null para contas antigas
+    role: { type: String, enum: ["aluno", "professor"], default: "aluno" },
   },
   { timestamps: true }
 );
 const User = mongoose.model("User", UserSchema);
 
-const QuestionSchema = new mongoose.Schema(
-  { number: Number, subject: String },
+// Avaliação
+const QuestionRefSchema = new mongoose.Schema(
+  {
+    number: Number,
+    subject: String,
+  },
   { _id: false }
 );
-
 const AssessmentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     questionsCount: { type: Number, required: true, min: 1, max: 50 },
-    questions: { type: [QuestionSchema], default: [] },
+    questions: { type: [QuestionRefSchema], default: [] },
   },
   { timestamps: true }
 );
 const Assessment = mongoose.model("Assessment", AssessmentSchema);
 
+// Gabarito
 const AnswerKeyItemSchema = new mongoose.Schema(
   {
     questionNumber: Number,
@@ -104,7 +114,6 @@ const AnswerKeyItemSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-
 const AnswerKeySchema = new mongoose.Schema(
   {
     assessmentId: {
@@ -118,6 +127,7 @@ const AnswerKeySchema = new mongoose.Schema(
 );
 const AnswerKey = mongoose.model("AnswerKey", AnswerKeySchema);
 
+// Respostas dos alunos
 const StudentAnswerItemSchema = new mongoose.Schema(
   {
     questionNumber: Number,
@@ -127,7 +137,6 @@ const StudentAnswerItemSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-
 const StudentAnswerSchema = new mongoose.Schema(
   {
     assessmentId: {
@@ -142,9 +151,10 @@ const StudentAnswerSchema = new mongoose.Schema(
 );
 const StudentAnswer = mongoose.model("StudentAnswer", StudentAnswerSchema);
 
+// Formulário público
 const FormSchema = new mongoose.Schema(
   {
-    formId: { type: String, unique: true, index: true }, // slug público
+    formId: { type: String, unique: true, index: true },
     assessmentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Assessment",
@@ -158,40 +168,55 @@ const FormSchema = new mongoose.Schema(
 );
 const Form = mongoose.model("Form", FormSchema);
 
+// Banco de Questões
+const QuestionSchema = new mongoose.Schema(
+  {
+    statement: { type: String, required: true },
+    options: { A: String, B: String, C: String, D: String, E: String },
+    correctAnswer: { type: String, enum: ["A", "B", "C", "D", "E"] },
+    subject: { type: String, index: true },
+    difficulty: {
+      type: String,
+      enum: ["Fácil", "Médio", "Difícil"],
+      index: true,
+    },
+    exam: {
+      type: String,
+      enum: ["ENEM", "ITA", "IME", "VESTIBULAR", "OUTRO"],
+      index: true,
+    },
+    year: { type: Number, index: true },
+    tags: [{ type: String, index: true }],
+    questionCode: { type: String },
+    source: { type: String },
+  },
+  { timestamps: true }
+);
+const Question = mongoose.model("Question", QuestionSchema);
+
 /* =========================
-   HELPERS
+   HELPERS / MIDDLEWARES
    ========================= */
 function signToken(user) {
-  return jwt.sign({ uid: user._id }, JWT_SECRET, { expiresIn: "7d" });
+  return jwt.sign({ uid: user._id, role: user.role }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
 }
-
-async function getUserFromToken(req) {
+function auth(req, res, next) {
+  const h = req.headers.authorization || "";
+  const token = h.startsWith("Bearer ") ? h.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Token ausente." });
   try {
-    const auth = req.headers.authorization || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-    if (!token) return null;
     const payload = jwt.verify(token, JWT_SECRET);
-    if (!payload?.uid) return null;
-    const user = await User.findById(payload.uid).lean();
-    return user || null;
+    req.user = payload;
+    return next();
   } catch {
-    return null;
+    return res.status(401).json({ error: "Token inválido." });
   }
 }
-
-async function authRequired(req, res, next) {
-  const user = await getUserFromToken(req);
-  if (!user) return res.status(401).json({ error: "Não autenticado." });
-  req.user = user;
-  next();
-}
-
-function requireProfessor(req, res, next) {
-  if (req.user?.role !== "professor") {
-    return res
-      .status(403)
-      .json({ error: "Apenas professores podem executar esta ação." });
-  }
+function onlyProfessor(req, res, next) {
+  if (req.user?.role !== "professor")
+    return res.status(403).json({ error: "Apenas professores." });
   next();
 }
 
@@ -212,7 +237,6 @@ async function getLatestAssessmentBundle() {
 
   return { assessment, answerKey: answerKey?.answers || null, studentAnswers };
 }
-
 function recomputeIsCorrect(answers, keyMap) {
   return answers.map((a) => ({
     ...a,
@@ -221,26 +245,32 @@ function recomputeIsCorrect(answers, keyMap) {
 }
 
 /* =========================
+   R O T A S   P Ú B L I C A S
+   ========================= */
+app.get("/health", (req, res) =>
+  res.json({ ok: true, time: new Date().toISOString() })
+);
+
+/* =========================
    AUTH
    ========================= */
 app.post("/auth/signup", async (req, res) => {
   try {
-    const { name, email, password, role } = req.body || {};
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ error: "E-mail e senha são obrigatórios." });
-    }
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password)
+      return res.status(400).json({ error: "Dados obrigatórios ausentes." });
+
     const exists = await User.findOne({ email });
     if (exists) return res.status(409).json({ error: "E-mail já cadastrado." });
 
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await User.create({
-      name: name || "",
-      email,
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       passwordHash,
-      role: ["aluno", "professor"].includes(role) ? role : null,
+      role: role === "professor" ? "professor" : "aluno",
     });
+
     const token = signToken(user);
     res.status(201).json({
       token,
@@ -253,22 +283,19 @@ app.post("/auth/signup", async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Falha no cadastro." });
+    res.status(500).json({ error: "Erro no cadastro." });
   }
 });
 
 app.post("/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body || {};
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ error: "E-mail e senha são obrigatórios." });
-    }
-    const user = await User.findOne({ email });
+    const { email, password } = req.body;
+    const user =
+      (await User.findOne({ email: (email || "").toLowerCase().trim() })) ||
+      null;
     if (!user) return res.status(401).json({ error: "Credenciais inválidas." });
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
+    const ok = await bcrypt.compare(password || "", user.passwordHash);
     if (!ok) return res.status(401).json({ error: "Credenciais inválidas." });
 
     const token = signToken(user);
@@ -283,24 +310,23 @@ app.post("/auth/login", async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Falha no login." });
+    res.status(500).json({ error: "Erro no login." });
   }
 });
 
-// Definir/atualizar perfil (aluno/professor)
-app.post("/me/role", authRequired, async (req, res) => {
+app.post("/me/role", auth, async (req, res) => {
   try {
-    const { role } = req.body || {};
-    if (!["aluno", "professor"].includes(role)) {
-      return res.status(400).json({ error: "role inválido." });
-    }
+    const { role } = req.body;
+    if (!["aluno", "professor"].includes(role))
+      return res.status(400).json({ error: "Role inválida." });
     const user = await User.findByIdAndUpdate(
-      req.user._id,
+      req.user.uid,
       { role },
       { new: true }
     ).lean();
+    if (!user)
+      return res.status(404).json({ error: "Usuário não encontrado." });
     res.json({
-      ok: true,
       user: {
         id: user._id,
         name: user.name,
@@ -310,21 +336,63 @@ app.post("/me/role", authRequired, async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "Não foi possível atualizar o perfil." });
+    res.status(500).json({ error: "Erro ao definir role." });
   }
 });
 
 /* =========================
-   API PRINCIPAL
+   BANCO DE QUESTÕES
    ========================= */
+// GET /questions?search=&subject=&difficulty=&exam=&year=&tag=&page=1&limit=10
+app.get("/questions", auth, async (req, res) => {
+  try {
+    const {
+      search = "",
+      subject = "",
+      difficulty = "",
+      exam = "",
+      year = "",
+      tag = "",
+      page = 1,
+      limit = 10,
+    } = req.query;
 
-// Healthcheck
-app.get("/health", (req, res) =>
-  res.json({ ok: true, time: new Date().toISOString() })
-);
+    const q = {};
+    if (search) q.statement = { $regex: new RegExp(search, "i") };
+    if (subject) q.subject = { $regex: new RegExp(subject, "i") };
+    if (difficulty) q.difficulty = difficulty;
+    if (exam) q.exam = exam;
+    if (year) q.year = Number(year);
+    if (tag) q.tags = { $in: [new RegExp(tag, "i")] };
 
-// Estado atual (última avaliação) — requer auth
-app.get("/all-data", authRequired, async (req, res) => {
+    const pg = Math.max(parseInt(page) || 1, 1);
+    const lim = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
+
+    const [items, total] = await Promise.all([
+      Question.find(q)
+        .sort({ year: -1, createdAt: -1 })
+        .skip((pg - 1) * lim)
+        .limit(lim)
+        .lean(),
+      Question.countDocuments(q),
+    ]);
+
+    res.json({
+      items,
+      total,
+      page: pg,
+      pages: Math.max(Math.ceil(total / lim), 1),
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao buscar questões." });
+  }
+});
+
+/* =========================
+   AVALIAÇÕES / GABARITO / RESPOSTAS
+   ========================= */
+app.get("/all-data", auth, async (req, res) => {
   try {
     const bundle = await getLatestAssessmentBundle();
     res.json(bundle);
@@ -334,8 +402,7 @@ app.get("/all-data", authRequired, async (req, res) => {
   }
 });
 
-// Criar avaliação (professor)
-app.post("/assessments", authRequired, requireProfessor, async (req, res) => {
+app.post("/assessments", auth, onlyProfessor, async (req, res) => {
   try {
     const { name, questionsCount, questions } = req.body;
     if (!name || !questionsCount || !Array.isArray(questions)) {
@@ -358,8 +425,54 @@ app.post("/assessments", authRequired, requireProfessor, async (req, res) => {
   }
 });
 
-// Salvar gabarito (professor)
-app.post("/answer-keys", authRequired, requireProfessor, async (req, res) => {
+// Criar avaliação a partir do banco
+app.post("/assessments/from-bank", auth, onlyProfessor, async (req, res) => {
+  try {
+    const { name, questionIds } = req.body;
+    if (!name || !Array.isArray(questionIds) || questionIds.length === 0) {
+      return res.status(400).json({ error: "Dados inválidos para builder." });
+    }
+
+    const questions = await Question.find({ _id: { $in: questionIds } }).lean();
+    if (questions.length !== questionIds.length) {
+      return res
+        .status(400)
+        .json({ error: "Algumas questões não foram encontradas." });
+    }
+
+    const byId = new Map(questions.map((q) => [q._id.toString(), q]));
+    const ordered = questionIds.map((id, idx) => {
+      const q = byId.get(id);
+      return { number: idx + 1, subject: q?.subject || "Assunto" };
+    });
+
+    const assessment = await Assessment.create({
+      name,
+      questionsCount: ordered.length,
+      questions: ordered,
+    });
+
+    const answers = questionIds.map((id, idx) => {
+      const q = byId.get(id);
+      return {
+        questionNumber: idx + 1,
+        correctAnswer: q?.correctAnswer || "A",
+        subject: q?.subject || "Assunto",
+      };
+    });
+    const key = await AnswerKey.create({
+      assessmentId: assessment._id,
+      answers,
+    });
+
+    res.status(201).json({ assessment, answerKey: key.answers });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao criar avaliação do banco." });
+  }
+});
+
+app.post("/answer-keys", auth, onlyProfessor, async (req, res) => {
   try {
     const { assessmentId, answers } = req.body;
     if (!assessmentId || !Array.isArray(answers) || !answers.length) {
@@ -377,8 +490,7 @@ app.post("/answer-keys", authRequired, requireProfessor, async (req, res) => {
   }
 });
 
-// Salvar respostas de um aluno (qualquer usuário autenticado pode registrar)
-app.post("/student-answers", authRequired, async (req, res) => {
+app.post("/student-answers", auth, async (req, res) => {
   try {
     const { assessmentId, studentName, answers } = req.body;
     if (!assessmentId || !studentName || !Array.isArray(answers)) {
@@ -413,24 +525,10 @@ app.post("/student-answers", authRequired, async (req, res) => {
   }
 });
 
-// Limpar todos os dados (professor)
-app.delete("/clear-data", authRequired, requireProfessor, async (req, res) => {
-  try {
-    await Promise.all([
-      Assessment.deleteMany({}),
-      AnswerKey.deleteMany({}),
-      StudentAnswer.deleteMany({}),
-      Form.deleteMany({}),
-    ]);
-    res.json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Não foi possível limpar os dados." });
-  }
-});
-
-// Criar formulário online (professor)
-app.post("/forms", authRequired, requireProfessor, async (req, res) => {
+/* =========================
+   FORM ONLINE
+   ========================= */
+app.post("/forms", auth, onlyProfessor, async (req, res) => {
   try {
     const { assessmentId, title, description, requireName } = req.body;
     if (!assessmentId)
@@ -458,7 +556,6 @@ app.post("/forms", authRequired, requireProfessor, async (req, res) => {
   }
 });
 
-// Página pública do formulário (HTML simples) — pública
 app.get("/form/:formId", async (req, res) => {
   try {
     const form = await Form.findOne({ formId: req.params.formId }).lean();
@@ -481,8 +578,7 @@ app.get("/form/:formId", async (req, res) => {
             (letter) => `
           <label style="margin-right:12px">
             <input type="radio" name="q${q.number}" value="${letter}" required> ${letter}
-          </label>
-        `
+          </label>`
           )
           .join("")}
       </div>`
@@ -519,7 +615,6 @@ app.get("/form/:formId", async (req, res) => {
   }
 });
 
-// Receber submissão do formulário — pública
 app.post(
   "/form/:formId/submit",
   express.urlencoded({ extended: true }),
@@ -568,11 +663,11 @@ app.post(
 
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.send(`
-        <html><body style="font-family:Arial;max-width:700px;margin:30px auto">
-          <h2>Respostas enviadas com sucesso!</h2>
-          <p>Obrigado por participar.</p>
-        </body></html>
-      `);
+      <html><body style="font-family:Arial;max-width:700px;margin:30px auto">
+        <h2>Respostas enviadas com sucesso!</h2>
+        <p>Obrigado por participar.</p>
+      </body></html>
+    `);
     } catch (e) {
       console.error(e);
       res.status(500).send("Erro ao enviar respostas.");
@@ -581,20 +676,160 @@ app.post(
 );
 
 /* =========================
-   SPA FALLBACK (depois das rotas de API)
+   GERENCIAR DADOS / USUÁRIOS
    ========================= */
-// Qualquer rota que não comece com /auth, /me, /form, /health, /all-data, etc.
-// e não seja arquivo estático -> devolve o index.html (SPA)
-app.get(
-  /^(?!\/(auth|me|form|health|all-data|assessments|answer-keys|student-answers|clear-data|forms|api|assets)\/?).*$/,
-  (req, res) => {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+app.delete("/clear-data", auth, onlyProfessor, async (req, res) => {
+  try {
+    await Promise.all([
+      Assessment.deleteMany({}),
+      AnswerKey.deleteMany({}),
+      StudentAnswer.deleteMany({}),
+      Form.deleteMany({}),
+    ]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Não foi possível limpar os dados." });
   }
-);
+});
+
+app.get("/users", auth, onlyProfessor, async (req, res) => {
+  try {
+    const users = await User.find({}, { passwordHash: 0 })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json(users);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao listar usuários." });
+  }
+});
+
+/* =========================
+   SEED (opcional)
+   ========================= */
+async function seedQuestionsIfNeeded() {
+  try {
+    const count = await Question.countDocuments();
+    if (count > 0) return;
+    const sample = [
+      {
+        statement: "Em um MRUV, qual é a equação horária da velocidade?",
+        options: {
+          A: "v = v0 + a·t",
+          B: "s = s0 + v·t",
+          C: "v = a·t",
+          D: "v = v0 + 2·a·t",
+          E: "s = v0·t + (a/2)·t²",
+        },
+        correctAnswer: "A",
+        subject: "Cinemática",
+        difficulty: "Fácil",
+        exam: "ENEM",
+        year: 2019,
+        tags: ["MRUV", "cinemática"],
+        questionCode: "Q1",
+      },
+      {
+        statement:
+          "Projétil lançado horizontalmente de altura h com v0. O alcance depende de:",
+        options: {
+          A: "apenas de h",
+          B: "apenas de v0",
+          C: "de h e v0",
+          D: "de h, v0 e massa",
+          E: "apenas da massa",
+        },
+        correctAnswer: "C",
+        subject: "Lançamentos",
+        difficulty: "Médio",
+        exam: "ENEM",
+        year: 2020,
+        tags: ["lançamento horizontal", "gravidade"],
+        questionCode: "Q2",
+      },
+      {
+        statement: "Força central atrativa ∝ 1/r² corresponde a:",
+        options: {
+          A: "Hooke",
+          B: "Gravitação Universal",
+          C: "Magnética",
+          D: "Arrasto",
+          E: "Elétrica cargas iguais",
+        },
+        correctAnswer: "B",
+        subject: "Gravitação",
+        difficulty: "Médio",
+        exam: "IME",
+        year: 2018,
+        tags: ["gravitação", "newton"],
+        questionCode: "IME-2018-12",
+      },
+      {
+        statement: "Em circuito RC transitório, a constante de tempo é:",
+        options: {
+          A: "τ = R/C",
+          B: "τ = C/R",
+          C: "τ = R·C",
+          D: "τ = 1/(R·C)",
+          E: "τ = R²·C",
+        },
+        correctAnswer: "C",
+        subject: "Eletrodinâmica",
+        difficulty: "Médio",
+        exam: "ITA",
+        year: 2017,
+        tags: ["RC", "transitório"],
+        questionCode: "ITA-2017-07",
+      },
+      {
+        statement: "Para ondas: v, f, λ. A relação correta é:",
+        options: {
+          A: "v = f/λ",
+          B: "v = λ/f",
+          C: "v = f·λ",
+          D: "v = 2πf·λ",
+          E: "v = λ²·f",
+        },
+        correctAnswer: "C",
+        subject: "Ondas",
+        difficulty: "Fácil",
+        exam: "VESTIBULAR",
+        year: 2016,
+        tags: ["ondas"],
+        questionCode: "VEST-2016-05",
+      },
+      {
+        statement: "Gás ideal a P constante: V é proporcional a:",
+        options: {
+          A: "Temperatura absoluta",
+          B: "Pressão",
+          C: "Massa",
+          D: "√T",
+          E: "1/T",
+        },
+        correctAnswer: "A",
+        subject: "Termologia",
+        difficulty: "Fácil",
+        exam: "ENEM",
+        year: 2015,
+        tags: ["gases ideais"],
+        questionCode: "ENEM-2015-33",
+      },
+    ];
+    await Question.insertMany(sample);
+    console.log(`🌱 Seed: ${sample.length} questões inseridas.`);
+  } catch (e) {
+    console.error("Seed falhou:", e.message);
+  }
+}
 
 /* =========================
    START
    ========================= */
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando em ${BASE_URL}`);
+app.listen(PORT, async () => {
+  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  if (process.env.SEED === "true") {
+    await seedQuestionsIfNeeded();
+  }
 });

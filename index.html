@@ -4,13 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sistema de Avaliações</title>
+
+    <!-- Ícones / Charts / PDF -->
     <link
       rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- DOCX (para exportar prova .docx) -->
+    <script src="https://unpkg.com/docx@8.4.0/build/index.js"></script>
 
     <style>
       :root {
@@ -19,12 +23,8 @@
         --accent-color: #17c3b2;
         --text-color: #f0f2f5;
         --card-bg: rgba(30, 39, 50, 0.85);
-        --hover-effect: rgba(90, 125, 255, 0.2);
         --success-color: #00b894;
         --danger-color: #ff6b6b;
-        --warning-color: #feca57;
-        --export-color: #00b894;
-        --ranking-color: #feca57;
         --form-color: #5a7dff;
       }
       * {
@@ -33,22 +33,18 @@
         box-sizing: border-box;
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
-
-      /* ====== Fundo com sua imagem ====== */
+      /* Fundo com sua imagem */
       body {
         min-height: 100vh;
         color: var(--text-color);
         background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)),
-          /* overlay para contraste */ url("assets/fundo-estrelado.png")
-            center/cover no-repeat fixed;
+          url("assets/fundo-estrelado.png") center/cover no-repeat fixed;
         padding: 20px;
       }
       .wrap {
         max-width: 1200px;
         margin: 0 auto;
       }
-
-      /* ====== Cartões de vidro ====== */
       .glass {
         background: rgba(0, 0, 0, 0.45);
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -71,8 +67,6 @@
         color: #d0d5ff;
         opacity: 0.9;
       }
-
-      /* ====== NAV topo app ====== */
       .topbar {
         display: flex;
         align-items: center;
@@ -109,17 +103,13 @@
         gap: 10px;
         justify-content: flex-end;
       }
-
-      /* ====== Telas ====== */
       .screen {
-        max-width: 880px;
+        max-width: 980px;
         margin: 30px auto;
       }
       .hidden {
         display: none !important;
       }
-
-      /* ====== Form ====== */
       form {
         display: grid;
         gap: 16px;
@@ -149,7 +139,6 @@
         text-decoration: underline;
       }
 
-      /* ====== App original ====== */
       header {
         text-align: center;
         margin-bottom: 24px;
@@ -176,7 +165,7 @@
       .card {
         background: var(--card-bg);
         border-radius: 15px;
-        padding: 25px;
+        padding: 22px;
         text-align: center;
         box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
         transition: 0.3s;
@@ -194,24 +183,12 @@
         pointer-events: none;
       }
       .card i {
-        font-size: 3rem;
-        margin-bottom: 15px;
-      }
-      .card.primary i {
-        color: var(--secondary-color);
-      }
-      .card.export i {
-        color: var(--export-color);
-      }
-      .card.ranking i {
-        color: var(--ranking-color);
-      }
-      .card.form i {
-        color: var(--form-color);
+        font-size: 2.6rem;
+        margin-bottom: 12px;
       }
       .card h3 {
-        font-size: 1.4rem;
-        margin-bottom: 8px;
+        font-size: 1.25rem;
+        margin-bottom: 6px;
       }
       .card p {
         color: #dfe6e9;
@@ -221,8 +198,8 @@
         display: none;
         background: var(--card-bg);
         border-radius: 15px;
-        padding: 26px;
-        margin-bottom: 24px;
+        padding: 24px;
+        margin-bottom: 22px;
         box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
         border: 1px solid rgba(255, 255, 255, 0.1);
         backdrop-filter: blur(10px);
@@ -322,12 +299,6 @@
         background: var(--primary-color);
         color: #fff;
       }
-      .ranking-table tr:hover {
-        background-color: rgba(255, 255, 255, 0.05);
-      }
-      .ranking-table tr:nth-child(even) {
-        background-color: rgba(0, 0, 0, 0.1);
-      }
       .medal {
         display: inline-block;
         width: 25px;
@@ -379,16 +350,79 @@
       .copy-btn:hover {
         background: var(--primary-color);
       }
-      @media (max-width: 768px) {
-        .dashboard {
-          grid-template-columns: 1fr;
+      /* Banco de Questões */
+      .qb-toolbar {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .qb-list {
+        display: grid;
+        gap: 10px;
+      }
+      .qb-item {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 10px;
+        padding: 12px;
+      }
+      .qb-head {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .tag {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+      }
+      .muted {
+        opacity: 0.85;
+      }
+      .tiny {
+        font-size: 0.86rem;
+      }
+      .builder-list {
+        display: grid;
+        gap: 8px;
+      }
+      .builder-item {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 10px;
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .builder-actions {
+        display: flex;
+        gap: 6px;
+        margin-left: auto;
+      }
+      .pagination {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+        margin-top: 10px;
+      }
+      @media (max-width: 900px) {
+        .qb-toolbar {
+          grid-template-columns: 1fr 1fr;
         }
       }
     </style>
   </head>
   <body>
     <div class="wrap">
-      <!-- ========== HOME ========== -->
+      <!-- HOME -->
       <section id="screen-home" class="screen">
         <div class="glass">
           <div
@@ -415,7 +449,7 @@
         </div>
       </section>
 
-      <!-- ========== AUTH ========== -->
+      <!-- AUTH -->
       <section id="screen-auth" class="screen hidden">
         <div class="glass">
           <div
@@ -434,8 +468,8 @@
           <!-- Login -->
           <form id="form-login">
             <div class="form-group">
-              <label for="email">E-mail</label>
-              <input
+              <label for="email">E-mail</label
+              ><input
                 id="email"
                 type="email"
                 placeholder="voce@exemplo.com"
@@ -443,8 +477,8 @@
               />
             </div>
             <div class="form-group">
-              <label for="password">Senha</label>
-              <input
+              <label for="password">Senha</label
+              ><input
                 id="password"
                 type="password"
                 placeholder="Sua senha"
@@ -457,7 +491,7 @@
               </button>
               <button class="btn primary">Entrar</button>
             </div>
-            <p class="subtitle" style="font-size: 14px; margin-top: 6px">
+            <p class="subtitle tiny" style="margin-top: 6px">
               Novo por aqui?
               <a
                 href="#"
@@ -471,8 +505,8 @@
           <!-- Cadastro -->
           <form id="form-signup" class="hidden">
             <div class="form-group">
-              <label for="name">Nome</label>
-              <input
+              <label for="name">Nome</label
+              ><input
                 id="name"
                 type="text"
                 placeholder="Seu nome completo"
@@ -480,8 +514,8 @@
               />
             </div>
             <div class="form-group">
-              <label for="email2">E-mail</label>
-              <input
+              <label for="email2">E-mail</label
+              ><input
                 id="email2"
                 type="email"
                 placeholder="voce@exemplo.com"
@@ -489,8 +523,8 @@
               />
             </div>
             <div class="form-group">
-              <label for="password2">Senha</label>
-              <input
+              <label for="password2">Senha</label
+              ><input
                 id="password2"
                 type="password"
                 placeholder="Crie uma senha"
@@ -510,7 +544,7 @@
               </button>
               <button class="btn primary">Cadastrar</button>
             </div>
-            <p class="subtitle" style="font-size: 14px; margin-top: 6px">
+            <p class="subtitle tiny" style="margin-top: 6px">
               Já tem conta?
               <a
                 href="#"
@@ -523,7 +557,7 @@
         </div>
       </section>
 
-      <!-- ========== APP ========== -->
+      <!-- APP -->
       <section id="screen-app" class="hidden">
         <div class="topbar">
           <div style="display: flex; align-items: center; gap: 10px">
@@ -555,10 +589,27 @@
                 >
                   <i class="fas fa-plus-circle"></i>
                   <h3>Criar Avaliação</h3>
-                  <p>
-                    Defina uma nova avaliação com nome, quantidade de questões e
-                    assuntos
-                  </p>
+                  <p>Defina uma nova avaliação manualmente</p>
+                </div>
+
+                <div
+                  class="card primary"
+                  onclick="showSection('question-bank')"
+                  id="card-question-bank"
+                >
+                  <i class="fa-solid fa-database"></i>
+                  <h3>Banco de Questões</h3>
+                  <p>Busque por ENEM/ITA/IME/Vestibulares</p>
+                </div>
+
+                <div
+                  class="card primary"
+                  onclick="showSection('exam-builder')"
+                  id="card-exam-builder"
+                >
+                  <i class="fa-solid fa-list-check"></i>
+                  <h3>Montar Prova</h3>
+                  <p>Selecione questões e crie uma prova</p>
                 </div>
 
                 <div
@@ -568,9 +619,7 @@
                 >
                   <i class="fas fa-key"></i>
                   <h3>Inserir Gabarito</h3>
-                  <p>
-                    Defina as respostas corretas para cada questão da avaliação
-                  </p>
+                  <p>Defina as respostas corretas</p>
                 </div>
 
                 <div
@@ -580,10 +629,7 @@
                 >
                   <i class="fas fa-user-graduate"></i>
                   <h3>Respostas dos Alunos</h3>
-                  <p>
-                    Registre as respostas dos alunos para cada questão (até 50
-                    alunos)
-                  </p>
+                  <p>Registre respostas (até 50)</p>
                 </div>
 
                 <div
@@ -593,9 +639,7 @@
                 >
                   <i class="fas fa-chart-bar"></i>
                   <h3>Resultados</h3>
-                  <p>
-                    Visualize análises detalhadas por questão, assunto e aluno
-                  </p>
+                  <p>Análises por questão, assunto e aluno</p>
                 </div>
 
                 <div
@@ -605,51 +649,42 @@
                 >
                   <i class="fas fa-database"></i>
                   <h3>Gerenciar Dados</h3>
-                  <p>Apague todos os dados para iniciar uma nova avaliação</p>
+                  <p>Apague todos os dados</p>
                 </div>
 
                 <div
                   id="card-export-pdf"
-                  class="card export disabled"
+                  class="card disabled"
                   onclick="exportToPDF()"
                 >
                   <i class="fas fa-file-pdf"></i>
-                  <h3>Exportar PDF</h3>
-                  <p>
-                    Gere um relatório completo em PDF com todos os dados da
-                    avaliação
-                  </p>
+                  <h3>Exportar PDF (Resultados)</h3>
+                  <p>Relatório de desempenho</p>
                 </div>
 
                 <div
                   id="card-ranking"
-                  class="card ranking disabled"
+                  class="card disabled"
                   onclick="showSection('ranking')"
                 >
                   <i class="fas fa-trophy"></i>
                   <h3>Ranking da Turma</h3>
-                  <p>
-                    Visualize o ranking completo de alunos ordenados por
-                    desempenho
-                  </p>
+                  <p>Ordenado por desempenho</p>
                 </div>
 
                 <div
                   id="card-online-form"
-                  class="card form disabled"
+                  class="card disabled"
                   onclick="showSection('online-form')"
                 >
                   <i class="fas fa-file-alt"></i>
                   <h3>Formulário Online</h3>
-                  <p>
-                    Crie uma avaliação online para os alunos responderem
-                    diretamente
-                  </p>
+                  <p>Avaliação no navegador</p>
                 </div>
               </div>
             </section>
 
-            <!-- Criar Avaliação -->
+            <!-- CRIAR AVALIAÇÃO (manual) -->
             <section id="create-assessment" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -659,10 +694,9 @@
                 <div class="form-group">
                   <label for="assessment-name">Nome da Avaliação</label>
                   <input
-                    type="text"
                     id="assessment-name"
                     required
-                    placeholder="Ex: Projeto Integrador - Módulo 1"
+                    placeholder="Ex: Simulado 01"
                   />
                 </div>
                 <div class="form-group">
@@ -678,13 +712,93 @@
                   />
                 </div>
                 <div id="questions-container"></div>
-                <button type="submit" class="btn primary">
-                  Salvar Avaliação
-                </button>
+                <button class="btn primary">Salvar Avaliação</button>
               </form>
             </section>
 
-            <!-- Inserir Gabarito -->
+            <!-- BANCO DE QUESTÕES -->
+            <section id="question-bank" class="section">
+              <button class="back-btn" onclick="showSection('dashboard')">
+                <i class="fas fa-arrow-left"></i> Voltar
+              </button>
+              <h2><i class="fa-solid fa-database"></i> Banco de Questões</h2>
+              <div class="qb-toolbar">
+                <input id="qb-search" placeholder="Buscar no enunciado..." />
+                <input id="qb-subject" placeholder="Assunto (ex: Cinemática)" />
+                <select id="qb-difficulty">
+                  <option value="">Dificuldade</option>
+                  <option>Fácil</option>
+                  <option>Médio</option>
+                  <option>Difícil</option>
+                </select>
+                <select id="qb-exam">
+                  <option value="">Exame</option>
+                  <option>ENEM</option>
+                  <option>ITA</option>
+                  <option>IME</option>
+                  <option>VESTIBULAR</option>
+                  <option>OUTRO</option>
+                </select>
+                <input id="qb-year" type="number" placeholder="Ano" />
+                <input id="qb-tag" placeholder="Tag (ex: MRUV)" />
+              </div>
+              <div class="actions" style="margin-bottom: 10px">
+                <button class="btn" onclick="qbClearFilters()">Limpar</button>
+                <button class="btn primary" onclick="qbFetch(1)">Buscar</button>
+              </div>
+              <div
+                id="qb-info"
+                class="muted tiny"
+                style="margin-bottom: 8px"
+              ></div>
+              <div id="qb-list" class="qb-list"></div>
+              <div class="pagination">
+                <button class="btn" onclick="qbPrev()">Anterior</button>
+                <span id="qb-page-label" class="muted tiny">—</span>
+                <button class="btn" onclick="qbNext()">Próxima</button>
+              </div>
+            </section>
+
+            <!-- MONTAR PROVA -->
+            <section id="exam-builder" class="section">
+              <button class="back-btn" onclick="showSection('dashboard')">
+                <i class="fas fa-arrow-left"></i> Voltar
+              </button>
+              <h2><i class="fa-solid fa-list-check"></i> Montar Prova</h2>
+              <div class="form-group">
+                <label for="builder-name">Nome da Prova</label>
+                <input
+                  id="builder-name"
+                  placeholder="Ex: Simulado ENEM 2019 - Bloco 1"
+                />
+              </div>
+              <div class="muted tiny" style="margin: 6px 0">
+                Selecione questões no <strong>Banco de Questões</strong> e
+                clique “Adicionar”. Elas aparecerão aqui.
+              </div>
+              <div id="builder-count" class="muted tiny">0 selecionadas</div>
+              <div
+                id="builder-list"
+                class="builder-list"
+                style="margin-top: 8px"
+              ></div>
+              <div class="actions" style="margin-top: 10px; flex-wrap: wrap">
+                <button class="btn" onclick="builderClear()">
+                  Limpar seleção
+                </button>
+                <button class="btn" onclick="builderExportPDF()">
+                  Exportar Prova (PDF)
+                </button>
+                <button class="btn" onclick="builderExportDOCX()">
+                  Exportar Prova (DOCX)
+                </button>
+                <button class="btn primary" onclick="builderCreateAssessment()">
+                  Criar Avaliação
+                </button>
+              </div>
+            </section>
+
+            <!-- INSERIR GABARITO -->
             <section id="insert-key" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -696,7 +810,7 @@
               </button>
             </section>
 
-            <!-- Respostas dos Alunos -->
+            <!-- RESPOSTAS ALUNOS -->
             <section id="student-answers" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -707,18 +821,15 @@
               </div>
               <form id="student-form">
                 <div class="form-group">
-                  <label for="student-name">Nome do Aluno</label>
-                  <input
-                    type="text"
+                  <label for="student-name">Nome do Aluno</label
+                  ><input
                     id="student-name"
                     required
                     placeholder="Ex: João Silva"
                   />
                 </div>
                 <div id="answers-container"></div>
-                <button type="submit" class="btn primary">
-                  Salvar Respostas
-                </button>
+                <button class="btn primary">Salvar Respostas</button>
               </form>
               <div id="students-list-container" style="margin-top: 20px">
                 <h3>Alunos Cadastrados</h3>
@@ -726,7 +837,7 @@
               </div>
             </section>
 
-            <!-- Resultados -->
+            <!-- RESULTADOS -->
             <section id="results" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -757,7 +868,7 @@
               </div>
             </section>
 
-            <!-- Ranking -->
+            <!-- RANKING -->
             <section id="ranking" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -766,7 +877,7 @@
               <div id="ranking-container"></div>
             </section>
 
-            <!-- Formulário Online -->
+            <!-- FORM ONLINE -->
             <section id="online-form" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -778,12 +889,12 @@
                   diretamente.
                 </p>
                 <div class="form-group">
-                  <label for="form-title">Título do Formulário</label>
-                  <input type="text" id="form-title" value="Avaliação Online" />
+                  <label for="form-title">Título do Formulário</label
+                  ><input id="form-title" value="Avaliação Online" />
                 </div>
                 <div class="form-group">
-                  <label for="form-description">Descrição/Instruções</label>
-                  <textarea id="form-description" rows="3">
+                  <label for="form-description">Descrição/Instruções</label
+                  ><textarea id="form-description" rows="3">
 Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
                   >
                 </div>
@@ -797,7 +908,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
                 <button id="generate-form-btn" class="btn primary">
                   Gerar Formulário Online
                 </button>
-
                 <div
                   id="form-link-container"
                   style="display: none; margin-top: 14px"
@@ -805,7 +915,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
                   <h3>Link do Formulário</h3>
                   <p>Compartilhe este link com seus alunos:</p>
                   <div class="link-box">
-                    <input type="text" id="form-link" readonly />
+                    <input id="form-link" readonly />
                     <div class="copy-btn" onclick="copyFormLink()">
                       <i class="fas fa-copy"></i> Copiar
                     </div>
@@ -818,7 +928,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
               </div>
             </section>
 
-            <!-- Gerenciar Dados -->
+            <!-- GERENCIAR DADOS -->
             <section id="manage-data" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -852,13 +962,12 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
 
     <script>
       /* ===================== CONFIG ===================== */
-      const API_URL = "https://api.fisicaava.online"; // altere para http://localhost:5000 em dev
+      const API_URL = "https://api.fisicaava.online"; // em dev: "http://localhost:5000"
 
       /* ===================== AUX AUTH ===================== */
       const screenHome = document.getElementById("screen-home");
       const screenAuth = document.getElementById("screen-auth");
       const screenApp = document.getElementById("screen-app");
-
       const formLogin = document.getElementById("form-login");
       const formSignup = document.getElementById("form-signup");
 
@@ -870,7 +979,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         if (where === "auth") screenAuth.classList.remove("hidden");
         if (where === "app") screenApp.classList.remove("hidden");
       }
-
       function switchAuth(mode) {
         go("auth");
         document.getElementById("auth-title").textContent =
@@ -878,7 +986,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         formSignup.classList.toggle("hidden", mode !== "signup");
         formLogin.classList.toggle("hidden", mode !== "login");
       }
-
       function token() {
         return localStorage.getItem("token") || "";
       }
@@ -895,7 +1002,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         localStorage.clear();
         go("home");
       }
-
       async function authFetch(path, init = {}) {
         const headers = Object.assign(
           {
@@ -911,7 +1017,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         return res;
       }
 
-      // Escolha rápida de perfil para contas antigas
       function chooseRoleThenSave() {
         return new Promise((resolve) => {
           const overlay = document.createElement("div");
@@ -945,7 +1050,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           box.querySelector("#r-cancel").onclick = () => done(null);
         });
       }
-
       async function saveRole(r) {
         try {
           const res = await authFetch("/me/role", {
@@ -966,7 +1070,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         }
       }
 
-      /* ===================== APP STATE ===================== */
+      /* ===================== ESTADO APP ===================== */
       let currentAssessment = null,
         answerKey = null,
         studentAnswers = [];
@@ -991,8 +1095,32 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
       );
       const tabButtons = document.querySelectorAll(".tab");
 
+      // Banco de Questões
+      let qbPage = 1,
+        qbLimit = 10,
+        qbTotal = 0,
+        qbPages = 0;
+      const qbEls = {
+        search: document.getElementById("qb-search"),
+        subject: document.getElementById("qb-subject"),
+        difficulty: document.getElementById("qb-difficulty"),
+        exam: document.getElementById("qb-exam"),
+        year: document.getElementById("qb-year"),
+        tag: document.getElementById("qb-tag"),
+        list: document.getElementById("qb-list"),
+        info: document.getElementById("qb-info"),
+        label: document.getElementById("qb-page-label"),
+      };
+
+      // Builder
+      let builderSelected = []; // array de questões inteiras
+      const builderEls = {
+        name: document.getElementById("builder-name"),
+        list: document.getElementById("builder-list"),
+        count: document.getElementById("builder-count"),
+      };
+
       document.addEventListener("DOMContentLoaded", async () => {
-        // Auto-login se existir token
         if (token()) {
           setRole(role());
           go("app");
@@ -1002,91 +1130,25 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         }
       });
 
-      /* ===================== AUTH HANDLERS ===================== */
-      formLogin.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const email = document.getElementById("email").value.trim();
-        const pass = document.getElementById("password").value;
-        try {
-          const res = await fetch(`${API_URL}/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password: pass }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            alert(data?.message || data?.error || "Falha no login");
-            return;
-          }
-          localStorage.setItem("token", data.token);
-          localStorage.setItem("user", JSON.stringify(data.user || { email }));
-          if (data.user?.role) {
-            setRole(data.user.role);
-          } else {
-            const r = await chooseRoleThenSave();
-            if (!r) return;
-            setRole(r);
-          }
-          go("app");
-          await initialize();
-        } catch (err) {
-          console.error(err);
-          alert("Erro ao conectar com o servidor.");
-        }
-      });
-
-      formSignup.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const name = document.getElementById("name").value.trim();
-        const email = document.getElementById("email2").value.trim();
-        const pass = document.getElementById("password2").value;
-        const r = document.getElementById("role2").value;
-        try {
-          const res = await fetch(`${API_URL}/auth/signup`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, email, password: pass, role: r }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            alert(data?.message || data?.error || "Erro no cadastro");
-            return;
-          }
-          localStorage.setItem("token", data.token);
-          localStorage.setItem(
-            "user",
-            JSON.stringify(data.user || { name, email })
-          );
-          setRole(data.user?.role || r);
-          go("app");
-          await initialize();
-        } catch (err) {
-          console.error(err);
-          alert("Erro ao conectar com o servidor.");
-        }
-      });
-
-      /* ===================== APP LOGIC ===================== */
+      /* ===================== INIT ===================== */
       async function initialize() {
         const r = role();
         document.getElementById("role-badge").textContent = r
           ? r.toUpperCase()
           : "—";
-
-        // Desabilitar cards exclusivos de professor
-        const profOnlyIds = [
+        // Desabilitar cards do aluno
+        const profOnly = [
           "card-create-assessment",
           "card-insert-key",
           "card-manage-data",
           "card-online-form",
+          "card-question-bank",
+          "card-exam-builder",
         ];
-        profOnlyIds.forEach((id) => {
+        profOnly.forEach((id) => {
           const el = document.getElementById(id);
-          if (r === "aluno") {
-            el.classList.add("disabled");
-          } else {
-            el.classList.remove("disabled");
-          }
+          if (r === "aluno") el.classList.add("disabled");
+          else el.classList.remove("disabled");
         });
 
         await fetchInitialData();
@@ -1102,15 +1164,18 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         document.getElementById("questions-count").oninput =
           generateQuestionFields;
         tabButtons.forEach((tab) => (tab.onclick = handleTabClick));
+
+        // Se professor, carregar banco inicialmente
+        if (r === "professor") {
+          qbFetch(1);
+        }
       }
 
       async function fetchInitialData() {
         try {
           const res = await authFetch("/all-data");
           const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data?.error || "Falha ao carregar");
-          }
+          if (!res.ok) throw new Error(data?.error || "Falha ao carregar");
           currentAssessment = data.assessment;
           answerKey = data.answerKey;
           studentAnswers = data.studentAnswers || [];
@@ -1119,11 +1184,11 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         }
       }
 
-      function handleTabClick(event) {
-        const tabId = event.target.getAttribute("data-tab");
-        changeTab(tabId, event.target);
+      /* ===================== NAVEGAÇÃO ===================== */
+      function handleTabClick(ev) {
+        const id = ev.target.getAttribute("data-tab");
+        changeTab(id, ev.target);
       }
-
       function showSection(id) {
         document
           .querySelectorAll(".section")
@@ -1170,9 +1235,9 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           "card-online-form": !currentAssessment || !answerKey,
         };
         for (const id in cardsToDisable) {
-          const card = document.getElementById(id);
-          if (cardsToDisable[id]) card.classList.add("disabled");
-          else card.classList.remove("disabled");
+          const el = document.getElementById(id);
+          if (cardsToDisable[id]) el.classList.add("disabled");
+          else el.classList.remove("disabled");
         }
         if (role() === "aluno") {
           [
@@ -1180,9 +1245,11 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             "card-insert-key",
             "card-manage-data",
             "card-online-form",
-          ].forEach((id) => {
-            document.getElementById(id).classList.add("disabled");
-          });
+            "card-question-bank",
+            "card-exam-builder",
+          ].forEach((id) =>
+            document.getElementById(id).classList.add("disabled")
+          );
         }
       }
       function updateStatus() {
@@ -1199,17 +1266,16 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         ).textContent = `Alunos cadastrados: ${studentAnswers.length}`;
       }
 
-      /* ====== Criar avaliação / Gabarito ====== */
+      /* ===================== CRIAR AVALIAÇÃO / GABARITO (manual) ===================== */
       function generateQuestionFields() {
         const n =
           parseInt(document.getElementById("questions-count").value) || 0;
         questionsContainer.innerHTML = "";
         for (let i = 1; i <= n; i++) {
-          const div = document.createElement("div");
-          div.className = "form-group";
-          div.innerHTML = `<label for="question-${i}">Questão ${i} - Assunto</label>
-                         <input id="question-${i}" required placeholder="Ex: Matemática Básica">`;
-          questionsContainer.appendChild(div);
+          const d = document.createElement("div");
+          d.className = "form-group";
+          d.innerHTML = `<label for="question-${i}">Questão ${i} - Assunto</label><input id="question-${i}" required placeholder="Ex: Cinemática">`;
+          questionsContainer.appendChild(d);
         }
       }
       async function handleAssessmentSubmit(e) {
@@ -1218,7 +1284,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           alert("Apenas professores podem criar avaliações.");
           return;
         }
-        const name = document.getElementById("assessment-name").value;
+        const name = document.getElementById("assessment-name").value.trim();
         const n = parseInt(document.getElementById("questions-count").value);
         const questions = [];
         for (let i = 1; i <= n; i++) {
@@ -1244,8 +1310,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           updateDashboardCards();
           showSection("dashboard");
         } catch (err) {
-          alert("Erro ao conectar");
           console.error(err);
+          alert("Erro ao conectar");
         }
       }
 
@@ -1313,12 +1379,12 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           updateDashboardCards();
           showSection("dashboard");
         } catch (err) {
-          alert("Erro ao conectar");
           console.error(err);
+          alert("Erro ao conectar");
         }
       }
 
-      /* ====== Respostas dos alunos ====== */
+      /* ===================== RESPOSTAS ALUNOS ===================== */
       function generateAnswerFields() {
         if (!currentAssessment || !answerKey) {
           answersContainer.innerHTML =
@@ -1330,9 +1396,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const d = document.createElement("div");
           d.className = "form-group";
           d.innerHTML = `<label for="answer-${q.number}">Questão ${q.number} - ${q.subject}</label>
-          <select id="answer-${q.number}" required>
-            <option value="">Selecione</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
-          </select>`;
+          <select id="answer-${q.number}" required><option value="">Selecione</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select>`;
           answersContainer.appendChild(d);
         });
       }
@@ -1391,11 +1455,10 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           renderStudentsList();
           updateDashboardCards();
         } catch (err) {
-          alert("Erro ao conectar");
           console.error(err);
+          alert("Erro ao conectar");
         }
       }
-
       function renderStudentsList() {
         if (!currentAssessment || studentAnswers.length === 0) {
           studentsList.innerHTML = "<p>Nenhum aluno cadastrado.</p>";
@@ -1429,7 +1492,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             " - <strong>Limite máximo atingido</strong>";
       }
 
-      /* ====== Limpeza / PDF / Gráficos / Ranking ====== */
+      /* ===================== LIMPEZA / EXPORT RESULTADOS / GRÁFICOS / RANKING ===================== */
       async function handleClearData() {
         if (role() === "aluno") {
           alert("Apenas professores podem limpar dados.");
@@ -1458,9 +1521,10 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             studentsList.innerHTML = "";
             formLinkContainer.style.display = "none";
             formPreviewContainer.innerHTML = "";
+            builderClear();
           } catch (err) {
-            alert("Erro ao conectar");
             console.error(err);
+            alert("Erro ao conectar");
           }
         }
       }
@@ -1472,17 +1536,18 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         }
         const el = document.createElement("div");
         el.style.padding = "20px";
-        el.style.backgroundColor = "#fff";
+        el.style.background = "#fff";
         el.style.color = "#000";
         el.style.fontFamily = "Arial,sans-serif";
-        el.innerHTML = `
-        <h1 style="text-align:center;color:${getComputedStyle(
+        el.innerHTML = `<h1 style="text-align:center;color:${getComputedStyle(
           document.documentElement
         ).getPropertyValue("--primary-color")}">Relatório de Avaliação</h1>
-        <h2>${currentAssessment.name}</h2>
-        <p><strong>Data:</strong> ${new Date().toLocaleDateString()}</p>
-        <p><strong>Total de alunos:</strong> ${studentAnswers.length}</p>
-        <p><strong>Total de questões:</strong> ${
+        <h2>${
+          currentAssessment.name
+        }</h2><p><strong>Data:</strong> ${new Date().toLocaleDateString()}</p>
+        <p><strong>Total de alunos:</strong> ${
+          studentAnswers.length
+        }</p><p><strong>Total de questões:</strong> ${
           currentAssessment.questionsCount
         }</p>`;
         document.body.appendChild(el);
@@ -1490,11 +1555,11 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const imgData = canvas.toDataURL("image/png");
           const { jsPDF } = window.jspdf;
           const pdf = new jsPDF("p", "mm", "a4");
-          const imgWidth = 210;
-          const pageHeight = 295;
+          const imgWidth = 210,
+            pageHeight = 295;
           const imgHeight = (canvas.height * imgWidth) / canvas.width;
-          let heightLeft = imgHeight;
-          let position = 0;
+          let heightLeft = imgHeight,
+            position = 0;
           pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
           heightLeft -= pageHeight;
           while (heightLeft >= 0) {
@@ -1515,50 +1580,43 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
       function getTopStudents(limit) {
         return studentAnswers
           .map((s) => {
-            const correct = s.answers.filter((a) => a.isCorrect).length;
+            const c = s.answers.filter((a) => a.isCorrect).length;
             return {
               studentName: s.studentName,
-              correctAnswers: correct,
-              score: (correct / currentAssessment.questionsCount) * 100,
+              correctAnswers: c,
+              score: (c / currentAssessment.questionsCount) * 100,
             };
           })
           .sort((a, b) => b.score - a.score)
           .slice(0, limit);
       }
-
       function renderRanking() {
         if (!currentAssessment || !answerKey || studentAnswers.length === 0) {
           rankingContainer.innerHTML = "<p>Não há dados suficientes.</p>";
           return;
         }
         const top = getTopStudents(studentAnswers.length);
-        rankingContainer.innerHTML = `
-        <h3>Ranking de Desempenho</h3>
-        <table class="ranking-table"><thead><tr><th>Posição</th><th>Aluno</th><th>Nota</th><th>Acertos</th><th>Status</th></tr></thead>
-        <tbody>
-          ${top
-            .map((st, i) => {
-              let medal =
-                i === 0
-                  ? '<span class="medal gold">1º</span>'
-                  : i === 1
-                  ? '<span class="medal silver">2º</span>'
-                  : i === 2
-                  ? '<span class="medal bronze">3º</span>'
-                  : `<span>${i + 1}º</span>`;
-              return `<tr>
-              <td>${medal}</td><td>${st.studentName}</td><td>${st.score.toFixed(
-                1
-              )}%</td><td>${st.correctAnswers}/${
-                currentAssessment.questionsCount
-              }</td>
-              <td><span class="status-badge ${
-                st.score >= 60 ? "status-correct" : "status-wrong"
-              }">${st.score >= 60 ? "Aprovado" : "Reprovado"}</span></td>
-            </tr>`;
-            })
-            .join("")}
-        </tbody></table>`;
+        rankingContainer.innerHTML = `<h3>Ranking de Desempenho</h3><table class="ranking-table"><thead><tr><th>Posição</th><th>Aluno</th><th>Nota</th><th>Acertos</th><th>Status</th></tr></thead><tbody>
+        ${top
+          .map((st, i) => {
+            let medal =
+              i === 0
+                ? '<span class="medal gold">1º</span>'
+                : i === 1
+                ? '<span class="medal silver">2º</span>'
+                : i === 2
+                ? '<span class="medal bronze">3º</span>'
+                : `<span>${i + 1}º</span>`;
+            return `<tr><td>${medal}</td><td>${
+              st.studentName
+            }</td><td>${st.score.toFixed(1)}%</td><td>${st.correctAnswers}/${
+              currentAssessment.questionsCount
+            }</td>
+          <td><span class="status-badge ${
+            st.score >= 60 ? "status-correct" : "status-wrong"
+          }">${st.score >= 60 ? "Aprovado" : "Reprovado"}</span></td></tr>`;
+          })
+          .join("")}</tbody></table>`;
       }
 
       function calculateQuestionPerformance() {
@@ -1577,10 +1635,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           }
         );
       }
-
       function renderChart(canvasId, type, labels, data, opts) {
-        const canvas = document.getElementById(canvasId);
-        const ctx = canvas.getContext("2d");
+        const ctx = document.getElementById(canvasId).getContext("2d");
         let chart;
         if (canvasId === "question-chart") chart = questionChartInstance;
         if (canvasId === "subject-chart") chart = subjectChartInstance;
@@ -1601,8 +1657,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           });
           if (canvasId === "question-chart") questionChartInstance = created;
           if (canvasId === "subject-chart") subjectChartInstance = created;
-          if (canvasId === "student-chart")
-            chart = studentChartInstance = created;
+          if (canvasId === "student-chart") studentChartInstance = created;
         }
       }
       function renderQuestionChart() {
@@ -1643,8 +1698,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const ans = studentAnswers.flatMap((st) =>
             st.answers.filter((a) => a.subject === s)
           );
-          const correct = ans.filter((a) => a.isCorrect).length;
-          return (correct / studentAnswers.length) * 100;
+          const c = ans.filter((a) => a.isCorrect).length;
+          return (c / studentAnswers.length) * 100;
         });
         renderChart("subject-chart", "bar", subjects, perf, {
           label: "Desempenho por Assunto (%)",
@@ -1723,12 +1778,12 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           div.innerHTML = `<h4>${st.studentName} - Nota: ${score.toFixed(
             1
           )}%</h4><p>Acertos: ${correct}/${currentAssessment.questionsCount}</p>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${squares}</div>`;
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${squares}</div>`;
           studentDetails.appendChild(div);
         });
       }
 
-      /* ====== Form online ====== */
+      /* ===================== FORM ONLINE ===================== */
       async function generateOnlineForm() {
         if (role() === "aluno") {
           alert("Apenas professores podem gerar formulário.");
@@ -1775,34 +1830,30 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
       }
       function renderFormPreview(fd) {
         if (!currentAssessment) return;
-        formPreviewContainer.innerHTML = `
-        <div style="background:rgba(255,255,255,.05);padding:14px;border-radius:10px">
+        formPreviewContainer.innerHTML = `<div style="background:rgba(255,255,255,.05);padding:14px;border-radius:10px">
           <h2>${fd.title}</h2><p>${fd.description || ""}</p>
           ${
             fd.requireName
               ? `<div class="form-group"><label>Nome do Aluno</label><input disabled placeholder="Digite seu nome"/></div>`
               : `<p><em>Envios anônimos habilitados.</em></p>`
           }
-          <div>
-            ${currentAssessment.questions
-              .map(
-                (q) => `
-              <div class="question-preview" style="background:rgba(255,255,255,.05);padding:10px;border-radius:10px;margin:8px 0">
-                <h4>Questão ${q.number} - ${q.subject}</h4>
-                <div class="options-container">
-                  ${["A", "B", "C", "D", "E"]
-                    .map(
-                      (L) =>
-                        `<div class="option-item"><input type="radio" disabled> <label>${L}</label></div>`
-                    )
-                    .join("")}
-                </div>
-              </div>`
-              )
-              .join("")}
-          </div>
-          <p style="margin-top:8px"><strong>Link público:</strong> <a href="${onlineFormLink}" target="_blank">${onlineFormLink}</a></p>
-        </div>`;
+          <div>${currentAssessment.questions
+            .map(
+              (q) =>
+                `<div class="question-preview" style="background:rgba(255,255,255,.05);padding:10px;border-radius:10px;margin:8px 0">
+              <h4>Questão ${q.number} - ${q.subject}</h4>
+              <div class="options-container">
+                ${["A", "B", "C", "D", "E"]
+                  .map(
+                    (L) =>
+                      `<div class="option-item"><input type="radio" disabled> <label>${L}</label></div>`
+                  )
+                  .join("")}
+              </div>
+            </div>`
+            )
+            .join("")}</div>
+          <p style="margin-top:8px"><strong>Link público:</strong> <a href="${onlineFormLink}" target="_blank">${onlineFormLink}</a></p></div>`;
       }
       async function copyFormLink() {
         try {
@@ -1817,6 +1868,351 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         } catch {
           alert("Não foi possível copiar.");
         }
+      }
+
+      /* ===================== BANCO DE QUESTÕES ===================== */
+      function qbBuildQuery(page) {
+        const params = new URLSearchParams();
+        if (qbEls.search.value.trim())
+          params.set("search", qbEls.search.value.trim());
+        if (qbEls.subject.value.trim())
+          params.set("subject", qbEls.subject.value.trim());
+        if (qbEls.difficulty.value)
+          params.set("difficulty", qbEls.difficulty.value);
+        if (qbEls.exam.value) params.set("exam", qbEls.exam.value);
+        if (qbEls.year.value) params.set("year", qbEls.year.value);
+        if (qbEls.tag.value.trim()) params.set("tag", qbEls.tag.value.trim());
+        params.set("page", page || qbPage);
+        params.set("limit", qbLimit);
+        return params.toString();
+      }
+      async function qbFetch(page = 1) {
+        if (role() === "aluno") {
+          alert("Apenas professores.");
+          return;
+        }
+        qbPage = page;
+        try {
+          qbEls.list.innerHTML = "<div class='muted tiny'>Carregando...</div>";
+          const res = await authFetch(`/questions?${qbBuildQuery(page)}`);
+          const data = await res.json();
+          if (!res.ok) {
+            qbEls.list.innerHTML = "<p>Falha ao carregar.</p>";
+            return;
+          }
+          qbTotal = data.total || 0;
+          qbPages = data.pages || 1;
+          qbEls.info.textContent = `Total: ${qbTotal} | Página ${data.page} de ${qbPages}`;
+          qbEls.label.textContent = `Página ${data.page} / ${qbPages}`;
+          qbRenderList(data.items || []);
+        } catch (e) {
+          console.error(e);
+          qbEls.list.innerHTML = "<p>Erro ao buscar.</p>";
+        }
+      }
+      function qbRenderList(items) {
+        if (!items.length) {
+          qbEls.list.innerHTML = "<p>Nenhuma questão encontrada.</p>";
+          return;
+        }
+        qbEls.list.innerHTML = "";
+        items.forEach((q) => {
+          const div = document.createElement("div");
+          div.className = "qb-item";
+          const meta = `<span class="tag">${q.exam || "—"} ${q.year || ""} ${
+            q.questionCode ? "• " + q.questionCode : ""
+          }</span>
+                      <span class="tag">${q.subject || "Assunto"}</span>
+                      <span class="tag">${q.difficulty || "Médio"}</span>
+                      ${
+                        Array.isArray(q.tags)
+                          ? q.tags
+                              .map((t) => `<span class="tag">${t}</span>`)
+                              .join("")
+                          : ""
+                      }`;
+          const opts = q.options
+            ? Object.entries(q.options)
+                .map(
+                  ([k, v]) =>
+                    `<div class="tiny"><strong>${k})</strong> ${v || ""}</div>`
+                )
+                .join("")
+            : "";
+          div.innerHTML = `
+            <div class="qb-head">
+              <div class="tiny muted">${meta}</div>
+              <div class="actions">
+                <button class="btn" onclick='builderAdd(${JSON.stringify(
+                  q
+                ).replace(/'/g, "&apos;")})'>Adicionar</button>
+              </div>
+            </div>
+            <div style="margin-top:8px"><strong>Enunciado:</strong> <span class="muted">${
+              q.statement
+            }</span></div>
+            <div style="margin-top:8px">${opts}</div>`;
+          qbEls.list.appendChild(div);
+        });
+      }
+      function qbPrev() {
+        if (qbPage > 1) qbFetch(qbPage - 1);
+      }
+      function qbNext() {
+        if (qbPage < qbPages) qbFetch(qbPage + 1);
+      }
+      function qbClearFilters() {
+        qbEls.search.value = "";
+        qbEls.subject.value = "";
+        qbEls.difficulty.value = "";
+        qbEls.exam.value = "";
+        qbEls.year.value = "";
+        qbEls.tag.value = "";
+        qbFetch(1);
+      }
+
+      /* ===================== BUILDER (montar prova) ===================== */
+      function builderSync() {
+        builderEls.count.textContent = `${builderSelected.length} selecionadas`;
+        builderEls.list.innerHTML = "";
+        builderSelected.forEach((q, idx) => {
+          const item = document.createElement("div");
+          item.className = "builder-item";
+          item.innerHTML = `<div style="min-width:36px"><strong>${
+            idx + 1
+          }.</strong></div>
+            <div style="flex:1">
+              <div class="tiny muted"><span class="tag">${q.exam || "—"} ${
+            q.year || ""
+          } ${q.questionCode ? "• " + q.questionCode : ""}</span>
+              <span class="tag">${
+                q.subject || "Assunto"
+              }</span> <span class="tag">${q.difficulty || "Médio"}</span></div>
+              <div style="margin-top:6px"><strong>Enunciado:</strong> ${
+                q.statement
+              }</div>
+              <div style="margin-top:6px">${
+                q.options
+                  ? Object.entries(q.options)
+                      .map(
+                        ([k, v]) =>
+                          `<div class="tiny"><strong>${k})</strong> ${
+                            v || ""
+                          }</div>`
+                      )
+                      .join("")
+                  : ""
+              }</div>
+            </div>
+            <div class="builder-actions">
+              <button class="btn" title="Subir" onclick="builderMove(${idx},-1)"><i class="fa-solid fa-arrow-up"></i></button>
+              <button class="btn" title="Descer" onclick="builderMove(${idx},1)"><i class="fa-solid fa-arrow-down"></i></button>
+              <button class="btn danger-btn" title="Remover" onclick="builderRemove(${idx})"><i class="fa-solid fa-trash"></i></button>
+            </div>`;
+          builderEls.list.appendChild(item);
+        });
+      }
+      function builderAdd(q) {
+        if (builderSelected.find((x) => x._id === q._id)) {
+          alert("Essa questão já foi adicionada.");
+          return;
+        }
+        builderSelected.push(q);
+        builderSync();
+      }
+      function builderRemove(i) {
+        builderSelected.splice(i, 1);
+        builderSync();
+      }
+      function builderMove(i, delta) {
+        const j = i + delta;
+        if (j < 0 || j >= builderSelected.length) return;
+        const tmp = builderSelected[i];
+        builderSelected[i] = builderSelected[j];
+        builderSelected[j] = tmp;
+        builderSync();
+      }
+      function builderClear() {
+        builderSelected = [];
+        builderSync();
+      }
+
+      async function builderCreateAssessment() {
+        if (role() === "aluno") {
+          alert("Apenas professores.");
+          return;
+        }
+        if (builderSelected.length === 0) {
+          alert("Adicione questões ao builder.");
+          return;
+        }
+        const name = (
+          builderEls.name.value || "Prova - Banco de Questões"
+        ).trim();
+        const ids = builderSelected.map((q) => q._id).filter(Boolean);
+        if (ids.length !== builderSelected.length) {
+          alert("Existem questões sem _id. Verifique se vieram do banco.");
+          return;
+        }
+        try {
+          const res = await authFetch("/assessments/from-bank", {
+            method: "POST",
+            body: JSON.stringify({ name, questionIds: ids }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            alert(data?.error || "Falha ao criar avaliação a partir do banco");
+            return;
+          }
+          currentAssessment = data.assessment || data; // dependendo de como você implementou no server
+          answerKey = data.answerKey || null;
+          alert("Avaliação criada a partir do Banco!");
+          updateDashboardCards();
+          showSection("dashboard");
+        } catch (e) {
+          console.error(e);
+          alert("Erro ao conectar");
+        }
+      }
+
+      /* ===== Exportar Prova (PDF/DOCX) a partir do builder ===== */
+      function builderExportPDF() {
+        if (builderSelected.length === 0) {
+          alert("Adicione questões ao builder.");
+          return;
+        }
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF("p", "mm", "a4");
+        const margin = 15;
+        let y = 20;
+        const lineHeight = 7;
+        const maxWidth = 180;
+        const title = (builderEls.name.value || "Prova").trim();
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(16);
+        pdf.text(title, 105, y, { align: "center" });
+        y += 10;
+        pdf.setFontSize(11);
+        pdf.setFont("helvetica", "normal");
+        builderSelected.forEach((q, idx) => {
+          const num = idx + 1;
+          const meta = [
+            q.exam || "",
+            q.year || "",
+            q.questionCode || "",
+            q.subject || "",
+            q.difficulty || "",
+          ]
+            .filter(Boolean)
+            .join(" • ");
+          y = ensurePage(pdf, y, margin);
+          pdf.setFont("helvetica", "bold");
+          pdf.text(`${num}) ${meta}`, margin, y);
+          y += 6;
+          pdf.setFont("helvetica", "normal");
+          y = wrapText(pdf, q.statement, margin, y, maxWidth, lineHeight);
+          if (q.options) {
+            ["A", "B", "C", "D", "E"].forEach((k) => {
+              if (q.options[k]) {
+                y = wrapText(
+                  pdf,
+                  `${k}) ${q.options[k]}`,
+                  margin + 4,
+                  y,
+                  maxWidth - 4,
+                  lineHeight
+                );
+              }
+            });
+          }
+          y += 4;
+        });
+        pdf.save(`${title.replace(/\s+/g, "-").toLowerCase()}.pdf`);
+      }
+      function ensurePage(pdf, y, margin) {
+        if (y > 280) {
+          pdf.addPage();
+          return margin;
+        }
+        return y;
+      }
+      function wrapText(pdf, text, x, y, maxWidth, lineHeight) {
+        const lines = pdf.splitTextToSize(text || "", maxWidth);
+        lines.forEach((line) => {
+          y = ensurePage(pdf, y, 15);
+          pdf.text(line, x, y);
+          y += lineHeight;
+        });
+        return y;
+      }
+
+      async function builderExportDOCX() {
+        if (builderSelected.length === 0) {
+          alert("Adicione questões ao builder.");
+          return;
+        }
+        const title = (builderEls.name.value || "Prova").trim();
+        const docxNS = window.docx; // da CDN
+        const paras = [
+          new docxNS.Paragraph({
+            text: title,
+            heading: docxNS.HeadingLevel.HEADING_1,
+          }),
+        ];
+        builderSelected.forEach((q, idx) => {
+          const num = idx + 1;
+          const meta = [
+            q.exam || "",
+            q.year || "",
+            q.questionCode || "",
+            q.subject || "",
+            q.difficulty || "",
+          ]
+            .filter(Boolean)
+            .join(" • ");
+          paras.push(
+            new docxNS.Paragraph({
+              text: `${num}) ${meta}`,
+              spacing: { after: 120 },
+              bold: true,
+            })
+          );
+          paras.push(
+            new docxNS.Paragraph({
+              text: q.statement || "",
+              spacing: { after: 80 },
+            })
+          );
+          if (q.options) {
+            ["A", "B", "C", "D", "E"].forEach((k) => {
+              if (q.options[k])
+                paras.push(
+                  new docxNS.Paragraph({
+                    text: `${k}) ${q.options[k]}`,
+                    spacing: { after: 40 },
+                  })
+                );
+            });
+          }
+          paras.push(
+            new docxNS.Paragraph({ text: "", spacing: { after: 160 } })
+          );
+        });
+        const doc = new docxNS.Document({
+          sections: [{ properties: {}, children: paras }],
+        });
+        const blob = await docxNS.Packer.toBlob(doc);
+        downloadBlob(blob, `${title.replace(/\s+/g, "-").toLowerCase()}.docx`);
+      }
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
       }
     </script>
   </body>
