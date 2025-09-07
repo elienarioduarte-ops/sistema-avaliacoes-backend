@@ -34,17 +34,12 @@
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
 
-      /* ====== Fundo estrelado + layout base ====== */
+      /* ====== Fundo com sua imagem ====== */
       body {
         min-height: 100vh;
         color: var(--text-color);
-        background: radial-gradient(
-            60% 80% at 50% 100%,
-            #2b1f52 0%,
-            #141628 60%,
-            #0a0c15 100%
-          ),
-          url("https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?q=80&w=1920&auto=format&fit=crop")
+        background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)),
+          /* overlay para contraste */ url("assets/fundo-estrelado.png")
             center/cover no-repeat fixed;
         padding: 20px;
       }
@@ -61,6 +56,7 @@
         padding: 26px;
         box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
         backdrop-filter: blur(10px);
+        color: #fff;
       }
       .title {
         font-size: 2.2rem;
@@ -153,7 +149,7 @@
         text-decoration: underline;
       }
 
-      /* ====== App original (cartões, seções etc.) ====== */
+      /* ====== App original ====== */
       header {
         text-align: center;
         margin-bottom: 24px;
@@ -392,7 +388,7 @@
   </head>
   <body>
     <div class="wrap">
-      <!-- ========== SCREEN: HOME (entrada com botões) ========== -->
+      <!-- ========== HOME ========== -->
       <section id="screen-home" class="screen">
         <div class="glass">
           <div
@@ -419,7 +415,7 @@
         </div>
       </section>
 
-      <!-- ========== SCREEN: AUTH (login / cadastro) ========== -->
+      <!-- ========== AUTH ========== -->
       <section id="screen-auth" class="screen hidden">
         <div class="glass">
           <div
@@ -527,7 +523,7 @@
         </div>
       </section>
 
-      <!-- ========== SCREEN: APP (SEU SISTEMA INTEIRO) ========== -->
+      <!-- ========== APP ========== -->
       <section id="screen-app" class="hidden">
         <div class="topbar">
           <div style="display: flex; align-items: center; gap: 10px">
@@ -549,7 +545,7 @@
           </header>
 
           <main>
-            <!-- ====== DASHBOARD ====== -->
+            <!-- DASHBOARD -->
             <section id="dashboard" class="section active">
               <div class="dashboard">
                 <div
@@ -653,7 +649,7 @@
               </div>
             </section>
 
-            <!-- ====== Criar Avaliação ====== -->
+            <!-- Criar Avaliação -->
             <section id="create-assessment" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -688,7 +684,7 @@
               </form>
             </section>
 
-            <!-- ====== Inserir Gabarito ====== -->
+            <!-- Inserir Gabarito -->
             <section id="insert-key" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -700,7 +696,7 @@
               </button>
             </section>
 
-            <!-- ====== Respostas dos Alunos ====== -->
+            <!-- Respostas dos Alunos -->
             <section id="student-answers" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -730,7 +726,7 @@
               </div>
             </section>
 
-            <!-- ====== Resultados ====== -->
+            <!-- Resultados -->
             <section id="results" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -761,7 +757,7 @@
               </div>
             </section>
 
-            <!-- ====== Ranking ====== -->
+            <!-- Ranking -->
             <section id="ranking" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -770,7 +766,7 @@
               <div id="ranking-container"></div>
             </section>
 
-            <!-- ====== Formulário Online ====== -->
+            <!-- Formulário Online -->
             <section id="online-form" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -822,7 +818,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
               </div>
             </section>
 
-            <!-- ====== Gerenciar Dados ====== -->
+            <!-- Gerenciar Dados -->
             <section id="manage-data" class="section">
               <button class="back-btn" onclick="showSection('dashboard')">
                 <i class="fas fa-arrow-left"></i> Voltar
@@ -1070,15 +1066,14 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         }
       });
 
-      /* ===================== APP LOGIC (SEU CÓDIGO) ===================== */
+      /* ===================== APP LOGIC ===================== */
       async function initialize() {
-        // bloquear partes do app para ALUNO
         const r = role();
         document.getElementById("role-badge").textContent = r
           ? r.toUpperCase()
           : "—";
 
-        // Cards bloqueados para aluno (apenas visualização)
+        // Desabilitar cards exclusivos de professor
         const profOnlyIds = [
           "card-create-assessment",
           "card-insert-key",
@@ -1098,7 +1093,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         updateDashboardCards();
         updateStatus();
 
-        // listeners (evita múltiplos binds)
+        // listeners
         assessmentForm.onsubmit = handleAssessmentSubmit;
         studentForm.onsubmit = handleStudentSubmit;
         saveKeyBtn.onclick = handleSaveKey;
@@ -1179,7 +1174,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           if (cardsToDisable[id]) card.classList.add("disabled");
           else card.classList.remove("disabled");
         }
-        // reforça regra de papel
         if (role() === "aluno") {
           [
             "card-create-assessment",
@@ -1435,7 +1429,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             " - <strong>Limite máximo atingido</strong>";
       }
 
-      /* ====== Limpeza / PDF / Gráficos / Ranking — (mesmo comportamento do seu código) ====== */
+      /* ====== Limpeza / PDF / Gráficos / Ranking ====== */
       async function handleClearData() {
         if (role() === "aluno") {
           alert("Apenas professores podem limpar dados.");
@@ -1490,8 +1484,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         <p><strong>Total de alunos:</strong> ${studentAnswers.length}</p>
         <p><strong>Total de questões:</strong> ${
           currentAssessment.questionsCount
-        }</p>
-      `;
+        }</p>`;
         document.body.appendChild(el);
         html2canvas(el).then((canvas) => {
           const imgData = canvas.toDataURL("image/png");
@@ -1608,7 +1601,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           });
           if (canvasId === "question-chart") questionChartInstance = created;
           if (canvasId === "subject-chart") subjectChartInstance = created;
-          if (canvasId === "student-chart") studentChartInstance = created;
+          if (canvasId === "student-chart")
+            chart = studentChartInstance = created;
         }
       }
       function renderQuestionChart() {
