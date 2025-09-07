@@ -1,39 +1,39 @@
 // server.js
 require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const crypto = require("crypto");
 const path = require("path");
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const bcrypt = require("bcrypt");
 
 const app = express();
 
 /* =========================
-   CONFIGURAÇÕES BÁSICAS
+   CONFIG
    ========================= */
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const JWT_SECRET = process.env.JWT_SECRET || "troque-isto";
 
-// Parse JSON primeiro
+// JSON parser
 app.use(express.json({ limit: "1mb" }));
 
 /* =========================
-   C O R S  (ANTES DAS ROTAS)
+   C O R S
    ========================= */
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// Política: permite requisições sem Origin (curl/healthcheck),
-// permite localhost (dev) e as origens informadas na env.
 app.use(
   cors({
     origin: (origin, cb) => {
+      // permite sem Origin (curl/healthcheck), localhost e envs
       if (!origin) return cb(null, true);
       if (
         allowedOrigins.includes(origin) ||
@@ -49,12 +49,15 @@ app.use(
     optionsSuccessStatus: 204,
   })
 );
-
-// Responde preflight para qualquer rota
 app.options("*", cors());
 
 /* =========================
-   CONEXÃO AO MONGODB
+   STATIC (public/)
+   ========================= */
+app.use(express.static(path.join(__dirname, "public")));
+
+/* =========================
+   DB
    ========================= */
 mongoose
   .connect(MONGODB_URI, { autoIndex: true })
@@ -67,6 +70,17 @@ mongoose
 /* =========================
    SCHEMAS & MODELS
    ========================= */
+const UserSchema = new mongoose.Schema(
+  {
+    name: String,
+    email: { type: String, unique: true, index: true, required: true },
+    passwordHash: { type: String, required: true },
+    role: { type: String, enum: ["aluno", "professor"], default: null }, // null para contas antigas
+  },
+  { timestamps: true }
+);
+const User = mongoose.model("User", UserSchema);
+
 const QuestionSchema = new mongoose.Schema(
   { number: Number, subject: String },
   { _id: false }
@@ -122,8 +136,6 @@ const StudentAnswerSchema = new mongoose.Schema(
       required: true,
     },
     studentName: { type: String, required: true },
-    // opcional: vincular ao usuário autenticado
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     answers: { type: [StudentAnswerItemSchema], default: [] },
   },
   { timestamps: true }
@@ -146,21 +158,43 @@ const FormSchema = new mongoose.Schema(
 );
 const Form = mongoose.model("Form", FormSchema);
 
-// Usuários (auth)
-const UserSchema = new mongoose.Schema(
-  {
-    name: String,
-    email: { type: String, unique: true, index: true, required: true },
-    password: { type: String, required: true }, // hash
-    role: { type: String, enum: ["aluno", "professor", null], default: null },
-  },
-  { timestamps: true }
-);
-const User = mongoose.model("User", UserSchema);
-
 /* =========================
    HELPERS
    ========================= */
+function signToken(user) {
+  return jwt.sign({ uid: user._id }, JWT_SECRET, { expiresIn: "7d" });
+}
+
+async function getUserFromToken(req) {
+  try {
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+    if (!token) return null;
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!payload?.uid) return null;
+    const user = await User.findById(payload.uid).lean();
+    return user || null;
+  } catch {
+    return null;
+  }
+}
+
+async function authRequired(req, res, next) {
+  const user = await getUserFromToken(req);
+  if (!user) return res.status(401).json({ error: "Não autenticado." });
+  req.user = user;
+  next();
+}
+
+function requireProfessor(req, res, next) {
+  if (req.user?.role !== "professor") {
+    return res
+      .status(403)
+      .json({ error: "Apenas professores podem executar esta ação." });
+  }
+  next();
+}
+
 async function getLatestAssessmentBundle() {
   const assessment = await Assessment.findOne().sort({ createdAt: -1 }).lean();
   if (!assessment)
@@ -186,127 +220,113 @@ function recomputeIsCorrect(answers, keyMap) {
   }));
 }
 
-// JWT helpers
-function sign(user) {
-  return jwt.sign({ sub: user._id, role: user.role }, JWT_SECRET, {
-    expiresIn: "7d",
-  });
-}
-function auth(req, res, next) {
-  const h = req.headers.authorization || "";
-  const token = h.startsWith("Bearer ") ? h.slice(7) : null;
-  if (!token) return res.status(401).json({ error: "Sem token" });
+/* =========================
+   AUTH
+   ========================= */
+app.post("/auth/signup", async (req, res) => {
   try {
-    req.user = jwt.verify(token, JWT_SECRET); // { sub, role }
-    next();
-  } catch {
-    return res.status(401).json({ error: "Token inválido/expirado" });
+    const { name, email, password, role } = req.body || {};
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ error: "E-mail e senha são obrigatórios." });
+    }
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(409).json({ error: "E-mail já cadastrado." });
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name: name || "",
+      email,
+      passwordHash,
+      role: ["aluno", "professor"].includes(role) ? role : null,
+    });
+    const token = signToken(user);
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Falha no cadastro." });
   }
-}
-function requireRole(...allowed) {
-  return (req, res, next) => {
-    if (!req.user?.role)
-      return res.status(403).json({ error: "Perfil não definido" });
-    if (!allowed.includes(req.user.role))
-      return res.status(403).json({ error: "Sem permissão" });
-    next();
-  };
-}
+});
+
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ error: "E-mail e senha são obrigatórios." });
+    }
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ error: "Credenciais inválidas." });
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: "Credenciais inválidas." });
+
+    const token = signToken(user);
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Falha no login." });
+  }
+});
+
+// Definir/atualizar perfil (aluno/professor)
+app.post("/me/role", authRequired, async (req, res) => {
+  try {
+    const { role } = req.body || {};
+    if (!["aluno", "professor"].includes(role)) {
+      return res.status(400).json({ error: "role inválido." });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { role },
+      { new: true }
+    ).lean();
+    res.json({
+      ok: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Não foi possível atualizar o perfil." });
+  }
+});
 
 /* =========================
-   ROTAS — AUTENTICAÇÃO
+   API PRINCIPAL
    ========================= */
+
 // Healthcheck
 app.get("/health", (req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
 );
 
-// SIGNUP
-app.post("/auth/signup", async (req, res) => {
-  try {
-    const { name, email, password, role } = req.body;
-    if (!email || !password)
-      return res.status(400).json({ error: "Dados inválidos" });
-    const exists = await User.findOne({ email });
-    if (exists) return res.status(400).json({ error: "E-mail já cadastrado" });
-
-    const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      name,
-      email,
-      password: hash,
-      role: ["aluno", "professor"].includes(role) ? role : null,
-    });
-    const token = sign(user);
-    res.json({
-      token,
-      user: { name: user.name, email: user.email, role: user.role },
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro no cadastro" });
-  }
-});
-
-// LOGIN
-app.post("/auth/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user) return res.status(401).json({ error: "Credenciais inválidas" });
-    const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).json({ error: "Credenciais inválidas" });
-
-    const token = sign(user);
-    res.json({
-      token,
-      user: { name: user.name, email: user.email, role: user.role },
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro no login" });
-  }
-});
-
-// (opcional) definir/alterar role após login
-app.post("/me/role", auth, async (req, res) => {
-  try {
-    const { role } = req.body; // "aluno" | "professor"
-    if (!["aluno", "professor"].includes(role))
-      return res.status(400).json({ error: "Role inválido" });
-    const user = await User.findByIdAndUpdate(
-      req.user.sub,
-      { role },
-      { new: true }
-    );
-    res.json({
-      ok: true,
-      user: { name: user.name, email: user.email, role: user.role },
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro ao definir role" });
-  }
-});
-
-/* =========================
-   ROTAS — APP
-   ========================= */
-
-// Estado atual (última avaliação) — exige login; pode filtrar aluno
-app.get("/all-data", auth, async (req, res) => {
+// Estado atual (última avaliação) — requer auth
+app.get("/all-data", authRequired, async (req, res) => {
   try {
     const bundle = await getLatestAssessmentBundle();
-
-    if (req.user.role === "aluno") {
-      // Aluno não vê gabarito nem todos os alunos
-      return res.json({
-        assessment: bundle.assessment,
-        answerKey: null,
-        studentAnswers: [], // ou somente as próprias se você salvar userId
-      });
-    }
-    // Professor vê tudo
     res.json(bundle);
   } catch (e) {
     console.error(e);
@@ -315,7 +335,7 @@ app.get("/all-data", auth, async (req, res) => {
 });
 
 // Criar avaliação (professor)
-app.post("/assessments", auth, requireRole("professor"), async (req, res) => {
+app.post("/assessments", authRequired, requireProfessor, async (req, res) => {
   try {
     const { name, questionsCount, questions } = req.body;
     if (!name || !questionsCount || !Array.isArray(questions)) {
@@ -339,7 +359,7 @@ app.post("/assessments", auth, requireRole("professor"), async (req, res) => {
 });
 
 // Salvar gabarito (professor)
-app.post("/answer-keys", auth, requireRole("professor"), async (req, res) => {
+app.post("/answer-keys", authRequired, requireProfessor, async (req, res) => {
   try {
     const { assessmentId, answers } = req.body;
     if (!assessmentId || !Array.isArray(answers) || !answers.length) {
@@ -357,8 +377,8 @@ app.post("/answer-keys", auth, requireRole("professor"), async (req, res) => {
   }
 });
 
-// Salvar respostas (professor OU aluno autenticado)
-app.post("/student-answers", auth, async (req, res) => {
+// Salvar respostas de um aluno (qualquer usuário autenticado pode registrar)
+app.post("/student-answers", authRequired, async (req, res) => {
   try {
     const { assessmentId, studentName, answers } = req.body;
     if (!assessmentId || !studentName || !Array.isArray(answers)) {
@@ -382,7 +402,6 @@ app.post("/student-answers", auth, async (req, res) => {
       assessmentId,
       studentName,
       answers: normalized,
-      userId: req.user.sub, // vincula quem enviou (prof/aluno)
     });
 
     res.status(201).json(saved);
@@ -395,7 +414,7 @@ app.post("/student-answers", auth, async (req, res) => {
 });
 
 // Limpar todos os dados (professor)
-app.delete("/clear-data", auth, requireRole("professor"), async (req, res) => {
+app.delete("/clear-data", authRequired, requireProfessor, async (req, res) => {
   try {
     await Promise.all([
       Assessment.deleteMany({}),
@@ -411,7 +430,7 @@ app.delete("/clear-data", auth, requireRole("professor"), async (req, res) => {
 });
 
 // Criar formulário online (professor)
-app.post("/forms", auth, requireRole("professor"), async (req, res) => {
+app.post("/forms", authRequired, requireProfessor, async (req, res) => {
   try {
     const { assessmentId, title, description, requireName } = req.body;
     if (!assessmentId)
@@ -421,7 +440,6 @@ app.post("/forms", auth, requireRole("professor"), async (req, res) => {
     if (!exists)
       return res.status(404).json({ error: "Avaliação não encontrada." });
 
-    // formId curto e único
     const formId = crypto.randomBytes(6).toString("base64url");
     const form = await Form.create({
       formId,
@@ -440,11 +458,7 @@ app.post("/forms", auth, requireRole("professor"), async (req, res) => {
   }
 });
 
-/* =========================
-   ROTAS PÚBLICAS DO FORM
-   ========================= */
-
-// Página pública do formulário (HTML simples)
+// Página pública do formulário (HTML simples) — pública
 app.get("/form/:formId", async (req, res) => {
   try {
     const form = await Form.findOne({ formId: req.params.formId }).lean();
@@ -487,14 +501,10 @@ app.get("/form/:formId", async (req, res) => {
   <form method="POST" action="${BASE_URL}/form/${form.formId}/submit">
     ${
       form.requireName
-        ? `
-      <div style="margin:12px 0">
-        <label>Nome do aluno: <input name="studentName" required style="padding:8px"/></label>
-      </div>
-    `
-        : `
-      <input type="hidden" name="studentName" value="Anônimo"/>
-    `
+        ? `<div style="margin:12px 0">
+             <label>Nome do aluno: <input name="studentName" required style="padding:8px"/></label>
+           </div>`
+        : `<input type="hidden" name="studentName" value="Anônimo"/>`
     }
     ${questions}
     <button type="submit" style="padding:10px 16px;border-radius:6px;border:0;background:#5a7dff;color:#fff">Enviar</button>
@@ -509,7 +519,7 @@ app.get("/form/:formId", async (req, res) => {
   }
 });
 
-// Receber submissão do formulário público
+// Receber submissão do formulário — pública
 app.post(
   "/form/:formId/submit",
   express.urlencoded({ extended: true }),
@@ -558,11 +568,11 @@ app.post(
 
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       return res.send(`
-      <html><body style="font-family:Arial;max-width:700px;margin:30px auto">
-        <h2>Respostas enviadas com sucesso!</h2>
-        <p>Obrigado por participar.</p>
-      </body></html>
-    `);
+        <html><body style="font-family:Arial;max-width:700px;margin:30px auto">
+          <h2>Respostas enviadas com sucesso!</h2>
+          <p>Obrigado por participar.</p>
+        </body></html>
+      `);
     } catch (e) {
       console.error(e);
       res.status(500).send("Erro ao enviar respostas.");
@@ -571,8 +581,20 @@ app.post(
 );
 
 /* =========================
+   SPA FALLBACK (depois das rotas de API)
+   ========================= */
+// Qualquer rota que não comece com /auth, /me, /form, /health, /all-data, etc.
+// e não seja arquivo estático -> devolve o index.html (SPA)
+app.get(
+  /^(?!\/(auth|me|form|health|all-data|assessments|answer-keys|student-answers|clear-data|forms|api|assets)\/?).*$/,
+  (req, res) => {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+  }
+);
+
+/* =========================
    START
    ========================= */
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor rodando na porta ${PORT}`);
+  console.log(`🚀 Servidor rodando em ${BASE_URL}`);
 });
