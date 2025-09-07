@@ -5,6 +5,8 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const crypto = require("crypto");
 const path = require("path");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
 const app = express();
 
@@ -14,6 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const JWT_SECRET = process.env.JWT_SECRET || "troque-isto";
 
 // Parse JSON primeiro
 app.use(express.json({ limit: "1mb" }));
@@ -65,10 +68,7 @@ mongoose
    SCHEMAS & MODELS
    ========================= */
 const QuestionSchema = new mongoose.Schema(
-  {
-    number: Number,
-    subject: String,
-  },
+  { number: Number, subject: String },
   { _id: false }
 );
 
@@ -122,6 +122,8 @@ const StudentAnswerSchema = new mongoose.Schema(
       required: true,
     },
     studentName: { type: String, required: true },
+    // opcional: vincular ao usuário autenticado
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     answers: { type: [StudentAnswerItemSchema], default: [] },
   },
   { timestamps: true }
@@ -143,6 +145,18 @@ const FormSchema = new mongoose.Schema(
   { timestamps: true }
 );
 const Form = mongoose.model("Form", FormSchema);
+
+// Usuários (auth)
+const UserSchema = new mongoose.Schema(
+  {
+    name: String,
+    email: { type: String, unique: true, index: true, required: true },
+    password: { type: String, required: true }, // hash
+    role: { type: String, enum: ["aluno", "professor", null], default: null },
+  },
+  { timestamps: true }
+);
+const User = mongoose.model("User", UserSchema);
 
 /* =========================
    HELPERS
@@ -172,19 +186,127 @@ function recomputeIsCorrect(answers, keyMap) {
   }));
 }
 
-/* =========================
-   ROTAS
-   ========================= */
+// JWT helpers
+function sign(user) {
+  return jwt.sign({ sub: user._id, role: user.role }, JWT_SECRET, {
+    expiresIn: "7d",
+  });
+}
+function auth(req, res, next) {
+  const h = req.headers.authorization || "";
+  const token = h.startsWith("Bearer ") ? h.slice(7) : null;
+  if (!token) return res.status(401).json({ error: "Sem token" });
+  try {
+    req.user = jwt.verify(token, JWT_SECRET); // { sub, role }
+    next();
+  } catch {
+    return res.status(401).json({ error: "Token inválido/expirado" });
+  }
+}
+function requireRole(...allowed) {
+  return (req, res, next) => {
+    if (!req.user?.role)
+      return res.status(403).json({ error: "Perfil não definido" });
+    if (!allowed.includes(req.user.role))
+      return res.status(403).json({ error: "Sem permissão" });
+    next();
+  };
+}
 
+/* =========================
+   ROTAS — AUTENTICAÇÃO
+   ========================= */
 // Healthcheck
 app.get("/health", (req, res) =>
   res.json({ ok: true, time: new Date().toISOString() })
 );
 
-// Estado atual (última avaliação)
-app.get("/all-data", async (req, res) => {
+// SIGNUP
+app.post("/auth/signup", async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
+    if (!email || !password)
+      return res.status(400).json({ error: "Dados inválidos" });
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(400).json({ error: "E-mail já cadastrado" });
+
+    const hash = await bcrypt.hash(password, 10);
+    const user = await User.create({
+      name,
+      email,
+      password: hash,
+      role: ["aluno", "professor"].includes(role) ? role : null,
+    });
+    const token = sign(user);
+    res.json({
+      token,
+      user: { name: user.name, email: user.email, role: user.role },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro no cadastro" });
+  }
+});
+
+// LOGIN
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) return res.status(401).json({ error: "Credenciais inválidas" });
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).json({ error: "Credenciais inválidas" });
+
+    const token = sign(user);
+    res.json({
+      token,
+      user: { name: user.name, email: user.email, role: user.role },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro no login" });
+  }
+});
+
+// (opcional) definir/alterar role após login
+app.post("/me/role", auth, async (req, res) => {
+  try {
+    const { role } = req.body; // "aluno" | "professor"
+    if (!["aluno", "professor"].includes(role))
+      return res.status(400).json({ error: "Role inválido" });
+    const user = await User.findByIdAndUpdate(
+      req.user.sub,
+      { role },
+      { new: true }
+    );
+    res.json({
+      ok: true,
+      user: { name: user.name, email: user.email, role: user.role },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Erro ao definir role" });
+  }
+});
+
+/* =========================
+   ROTAS — APP
+   ========================= */
+
+// Estado atual (última avaliação) — exige login; pode filtrar aluno
+app.get("/all-data", auth, async (req, res) => {
   try {
     const bundle = await getLatestAssessmentBundle();
+
+    if (req.user.role === "aluno") {
+      // Aluno não vê gabarito nem todos os alunos
+      return res.json({
+        assessment: bundle.assessment,
+        answerKey: null,
+        studentAnswers: [], // ou somente as próprias se você salvar userId
+      });
+    }
+    // Professor vê tudo
     res.json(bundle);
   } catch (e) {
     console.error(e);
@@ -192,8 +314,8 @@ app.get("/all-data", async (req, res) => {
   }
 });
 
-// Criar avaliação
-app.post("/assessments", async (req, res) => {
+// Criar avaliação (professor)
+app.post("/assessments", auth, requireRole("professor"), async (req, res) => {
   try {
     const { name, questionsCount, questions } = req.body;
     if (!name || !questionsCount || !Array.isArray(questions)) {
@@ -216,8 +338,8 @@ app.post("/assessments", async (req, res) => {
   }
 });
 
-// Salvar gabarito
-app.post("/answer-keys", async (req, res) => {
+// Salvar gabarito (professor)
+app.post("/answer-keys", auth, requireRole("professor"), async (req, res) => {
   try {
     const { assessmentId, answers } = req.body;
     if (!assessmentId || !Array.isArray(answers) || !answers.length) {
@@ -235,8 +357,8 @@ app.post("/answer-keys", async (req, res) => {
   }
 });
 
-// Salvar respostas de um aluno (recomputa isCorrect no backend)
-app.post("/student-answers", async (req, res) => {
+// Salvar respostas (professor OU aluno autenticado)
+app.post("/student-answers", auth, async (req, res) => {
   try {
     const { assessmentId, studentName, answers } = req.body;
     if (!assessmentId || !studentName || !Array.isArray(answers)) {
@@ -260,6 +382,7 @@ app.post("/student-answers", async (req, res) => {
       assessmentId,
       studentName,
       answers: normalized,
+      userId: req.user.sub, // vincula quem enviou (prof/aluno)
     });
 
     res.status(201).json(saved);
@@ -271,8 +394,8 @@ app.post("/student-answers", async (req, res) => {
   }
 });
 
-// Limpar todos os dados
-app.delete("/clear-data", async (req, res) => {
+// Limpar todos os dados (professor)
+app.delete("/clear-data", auth, requireRole("professor"), async (req, res) => {
   try {
     await Promise.all([
       Assessment.deleteMany({}),
@@ -287,8 +410,8 @@ app.delete("/clear-data", async (req, res) => {
   }
 });
 
-// Criar formulário online
-app.post("/forms", async (req, res) => {
+// Criar formulário online (professor)
+app.post("/forms", auth, requireRole("professor"), async (req, res) => {
   try {
     const { assessmentId, title, description, requireName } = req.body;
     if (!assessmentId)
@@ -316,6 +439,10 @@ app.post("/forms", async (req, res) => {
     res.status(500).json({ error: "Não foi possível criar o formulário." });
   }
 });
+
+/* =========================
+   ROTAS PÚBLICAS DO FORM
+   ========================= */
 
 // Página pública do formulário (HTML simples)
 app.get("/form/:formId", async (req, res) => {
