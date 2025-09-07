@@ -33,7 +33,6 @@
         box-sizing: border-box;
         font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
       }
-      /* Fundo com sua imagem */
       body {
         min-height: 100vh;
         color: var(--text-color);
@@ -138,7 +137,6 @@
         color: #fff;
         text-decoration: underline;
       }
-
       header {
         text-align: center;
         margin-bottom: 24px;
@@ -350,7 +348,6 @@
       .copy-btn:hover {
         background: var(--primary-color);
       }
-      /* Banco de Questões */
       .qb-toolbar {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
@@ -468,8 +465,8 @@
           <!-- Login -->
           <form id="form-login">
             <div class="form-group">
-              <label for="email">E-mail</label
-              ><input
+              <label for="email">E-mail</label>
+              <input
                 id="email"
                 type="email"
                 placeholder="voce@exemplo.com"
@@ -477,8 +474,8 @@
               />
             </div>
             <div class="form-group">
-              <label for="password">Senha</label
-              ><input
+              <label for="password">Senha</label>
+              <input
                 id="password"
                 type="password"
                 placeholder="Sua senha"
@@ -505,8 +502,8 @@
           <!-- Cadastro -->
           <form id="form-signup" class="hidden">
             <div class="form-group">
-              <label for="name">Nome</label
-              ><input
+              <label for="name">Nome</label>
+              <input
                 id="name"
                 type="text"
                 placeholder="Seu nome completo"
@@ -514,8 +511,8 @@
               />
             </div>
             <div class="form-group">
-              <label for="email2">E-mail</label
-              ><input
+              <label for="email2">E-mail</label>
+              <input
                 id="email2"
                 type="email"
                 placeholder="voce@exemplo.com"
@@ -523,8 +520,8 @@
               />
             </div>
             <div class="form-group">
-              <label for="password2">Senha</label
-              ><input
+              <label for="password2">Senha</label>
+              <input
                 id="password2"
                 type="password"
                 placeholder="Crie uma senha"
@@ -821,8 +818,8 @@
               </div>
               <form id="student-form">
                 <div class="form-group">
-                  <label for="student-name">Nome do Aluno</label
-                  ><input
+                  <label for="student-name">Nome do Aluno</label>
+                  <input
                     id="student-name"
                     required
                     placeholder="Ex: João Silva"
@@ -889,12 +886,12 @@
                   diretamente.
                 </p>
                 <div class="form-group">
-                  <label for="form-title">Título do Formulário</label
-                  ><input id="form-title" value="Avaliação Online" />
+                  <label for="form-title">Título do Formulário</label>
+                  <input id="form-title" value="Avaliação Online" />
                 </div>
                 <div class="form-group">
-                  <label for="form-description">Descrição/Instruções</label
-                  ><textarea id="form-description" rows="3">
+                  <label for="form-description">Descrição/Instruções</label>
+                  <textarea id="form-description" rows="3">
 Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
                   >
                 </div>
@@ -979,6 +976,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         if (where === "auth") screenAuth.classList.remove("hidden");
         if (where === "app") screenApp.classList.remove("hidden");
       }
+
+      // (ATUALIZADO) alterna telas de Login/Cadastro
       function switchAuth(mode) {
         go("auth");
         document.getElementById("auth-title").textContent =
@@ -986,6 +985,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         formSignup.classList.toggle("hidden", mode !== "signup");
         formLogin.classList.toggle("hidden", mode !== "login");
       }
+
       function token() {
         return localStorage.getItem("token") || "";
       }
@@ -1070,6 +1070,77 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         }
       }
 
+      /* ===================== AUTH HANDLERS (NOVO) ===================== */
+      formSignup.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("name").value.trim();
+        const email = document.getElementById("email2").value.trim();
+        const password = document.getElementById("password2").value;
+        const roleSel = document.getElementById("role2").value; // "aluno" | "professor"
+
+        if (!name || !email || !password) {
+          alert("Preencha nome, e-mail e senha.");
+          return;
+        }
+
+        try {
+          const res = await fetch(`${API_URL}/auth/signup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, email, password, role: roleSel }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            console.error("SIGNUP FAIL:", res.status, data);
+            alert(data?.error || `Falha no cadastro (${res.status})`);
+            return;
+          }
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("role", data.user.role);
+          localStorage.setItem("user", JSON.stringify(data.user));
+          setRole(data.user.role);
+          go("app");
+          await initialize();
+        } catch (err) {
+          console.error("SIGNUP ERROR:", err);
+          alert("Erro ao conectar no cadastro");
+        }
+      };
+
+      formLogin.onsubmit = async (e) => {
+        e.preventDefault();
+        const email = document.getElementById("email").value.trim();
+        const password = document.getElementById("password").value;
+
+        if (!email || !password) {
+          alert("Preencha e-mail e senha.");
+          return;
+        }
+
+        try {
+          const res = await fetch(`${API_URL}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            console.error("LOGIN FAIL:", res.status, data);
+            alert(data?.error || `Falha no login (${res.status})`);
+            return;
+          }
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("role", data.user.role);
+          localStorage.setItem("user", JSON.stringify(data.user));
+          setRole(data.user.role);
+          go("app");
+          await initialize();
+        } catch (err) {
+          console.error("LOGIN ERROR:", err);
+          alert("Erro ao conectar no login");
+        }
+      };
+
       /* ===================== ESTADO APP ===================== */
       let currentAssessment = null,
         answerKey = null,
@@ -1113,7 +1184,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
       };
 
       // Builder
-      let builderSelected = []; // array de questões inteiras
+      let builderSelected = [];
       const builderEls = {
         name: document.getElementById("builder-name"),
         list: document.getElementById("builder-list"),
@@ -1165,7 +1236,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           generateQuestionFields;
         tabButtons.forEach((tab) => (tab.onclick = handleTabClick));
 
-        // Se professor, carregar banco inicialmente
         if (r === "professor") {
           qbFetch(1);
         }
@@ -1396,7 +1466,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const d = document.createElement("div");
           d.className = "form-group";
           d.innerHTML = `<label for="answer-${q.number}">Questão ${q.number} - ${q.subject}</label>
-          <select id="answer-${q.number}" required><option value="">Selecione</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select>`;
+          <select id="answer-${q.number}" required><option value=''>Selecione</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select>`;
           answersContainer.appendChild(d);
         });
       }
@@ -1492,7 +1562,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             " - <strong>Limite máximo atingido</strong>";
       }
 
-      /* ===================== LIMPEZA / EXPORT RESULTADOS / GRÁFICOS / RANKING ===================== */
+      /* ===================== LIMPEZA / EXPORT / GRÁFICOS / RANKING ===================== */
       async function handleClearData() {
         if (role() === "aluno") {
           alert("Apenas professores podem limpar dados.");
@@ -1922,15 +1992,15 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           const meta = `<span class="tag">${q.exam || "—"} ${q.year || ""} ${
             q.questionCode ? "• " + q.questionCode : ""
           }</span>
-                      <span class="tag">${q.subject || "Assunto"}</span>
-                      <span class="tag">${q.difficulty || "Médio"}</span>
-                      ${
-                        Array.isArray(q.tags)
-                          ? q.tags
-                              .map((t) => `<span class="tag">${t}</span>`)
-                              .join("")
-                          : ""
-                      }`;
+                        <span class="tag">${q.subject || "Assunto"}</span>
+                        <span class="tag">${q.difficulty || "Médio"}</span>
+                        ${
+                          Array.isArray(q.tags)
+                            ? q.tags
+                                .map((t) => `<span class="tag">${t}</span>`)
+                                .join("")
+                            : ""
+                        }`;
           const opts = q.options
             ? Object.entries(q.options)
                 .map(
@@ -1971,7 +2041,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         qbFetch(1);
       }
 
-      /* ===================== BUILDER (montar prova) ===================== */
+      /* ===================== BUILDER ===================== */
       function builderSync() {
         builderEls.count.textContent = `${builderSelected.length} selecionadas`;
         builderEls.list.innerHTML = "";
@@ -2064,7 +2134,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
             alert(data?.error || "Falha ao criar avaliação a partir do banco");
             return;
           }
-          currentAssessment = data.assessment || data; // dependendo de como você implementou no server
+          currentAssessment = data.assessment || data;
           answerKey = data.answerKey || null;
           alert("Avaliação criada a partir do Banco!");
           updateDashboardCards();
@@ -2113,7 +2183,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           y = wrapText(pdf, q.statement, margin, y, maxWidth, lineHeight);
           if (q.options) {
             ["A", "B", "C", "D", "E"].forEach((k) => {
-              if (q.options[k]) {
+              if (q.options[k])
                 y = wrapText(
                   pdf,
                   `${k}) ${q.options[k]}`,
@@ -2122,7 +2192,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
                   maxWidth - 4,
                   lineHeight
                 );
-              }
             });
           }
           y += 4;
@@ -2152,7 +2221,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           return;
         }
         const title = (builderEls.name.value || "Prova").trim();
-        const docxNS = window.docx; // da CDN
+        const docxNS = window.docx;
         const paras = [
           new docxNS.Paragraph({
             text: title,
