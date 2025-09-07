@@ -1,0 +1,37 @@
+{
+  "items": [
+    {
+      "title": "Queda livre – velocidade após t",
+      "url": "https://libretexts.org/.../atividade-queda-livre",
+      "license": "CC BY-NC-SA 4.0",
+      "attribution": "Autor(a) – LibreTexts Physics ADAPT",
+      "subject": "Cinemática",
+      "difficulty": "Médio",
+      "tags": ["queda livre", "MRUV"],
+      "questionCode": "LT-QL-001",
+      "year": 2025,
+      "question": "<p>Um corpo é abandonado do repouso sob gravidade g. Após tempo t, a velocidade é:</p>",
+      "answers": [
+        { "text": "<p>v = g·t</p>", "is_correct": true },
+        { "text": "<p>v = g/t</p>", "is_correct": false },
+        { "text": "<p>v = 2g·t</p>", "is_correct": false },
+        { "text": "<p>v = g·t²</p>", "is_correct": false }
+      ]
+    },
+    {
+      "title": "Leis de Newton – força resultante",
+      "url": "https://adapt.libretexts.org/assessment/xyz",
+      "license": "CC BY-NC-SA 4.0",
+      "attribution": "Equipe – ADAPT",
+      "subject": "Dinâmica",
+      "difficulty": "Fácil",
+      "tags": ["força", "segunda lei"],
+      "question": "<p>A 2ª lei de Newton pode ser expressa por:</p>",
+      "answers": [
+        { "text": "F = m·a", "is_correct": true },
+        { "text": "F = m·v", "is_correct": false },
+        { "text": "E = m·c^2", "is_correct": false }
+      ]
+    }
+  ]
+}

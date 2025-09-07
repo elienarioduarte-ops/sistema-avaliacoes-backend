@@ -38,7 +38,7 @@ if (!JWT_SECRET) {
 }
 
 /* Body parsers */
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "2mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 /* Segurança (headers + sanitização) */
@@ -220,6 +220,11 @@ const QuestionSchema = new mongoose.Schema(
     tags: [{ type: String, index: true }],
     questionCode: { type: String },
     source: { type: String },
+
+    // ===== Novos campos para OER / LibreTexts/ADAPT =====
+    license: { type: String }, // ex.: "CC BY-NC-SA 4.0"
+    sourceUrl: { type: String }, // URL do recurso original
+    attribution: { type: String }, // texto curto de crédito
   },
   { timestamps: true }
 );
@@ -436,6 +441,222 @@ app.get("/questions", auth, async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro ao buscar questões." });
+  }
+});
+
+// Criar nova questão no banco (somente professor)
+app.post("/questions", auth, onlyProfessor, async (req, res) => {
+  try {
+    const {
+      statement,
+      options,
+      correctAnswer,
+      subject,
+      difficulty,
+      exam,
+      year,
+      tags,
+      questionCode,
+      source,
+      license,
+      sourceUrl,
+      attribution,
+    } = req.body;
+
+    if (!statement || !options || !correctAnswer) {
+      return res
+        .status(400)
+        .json({
+          error: "Enunciado, alternativas e resposta correta são obrigatórios.",
+        });
+    }
+
+    const q = await Question.create({
+      statement,
+      options,
+      correctAnswer,
+      subject: subject || "Assunto",
+      difficulty: ["Fácil", "Médio", "Difícil"].includes(difficulty)
+        ? difficulty
+        : "Médio",
+      exam: ["ENEM", "ITA", "IME", "VESTIBULAR", "OUTRO"].includes(exam)
+        ? exam
+        : "OUTRO",
+      year: year ? Number(year) : new Date().getFullYear(),
+      tags: Array.isArray(tags) ? tags : [],
+      questionCode,
+      source: source || "Manual",
+      license: license || "",
+      sourceUrl: sourceUrl || "",
+      attribution: attribution || "",
+    });
+
+    res.status(201).json(q);
+  } catch (e) {
+    console.error("Erro ao criar questão:", e);
+    res.status(500).json({ error: "Não foi possível salvar a questão." });
+  }
+});
+
+// Importar várias questões de uma vez (somente professor)
+app.post("/questions/bulk", auth, onlyProfessor, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Envie um array 'items' com questões." });
+    }
+
+    const docs = [];
+    let skipped = 0;
+
+    for (const it of items) {
+      try {
+        if (!it.statement || !it.options || !it.correctAnswer) {
+          skipped++;
+          continue;
+        }
+        docs.push({
+          statement: it.statement,
+          options: it.options,
+          correctAnswer: it.correctAnswer,
+          subject: it.subject || "Assunto",
+          difficulty: ["Fácil", "Médio", "Difícil"].includes(it.difficulty)
+            ? it.difficulty
+            : "Médio",
+          exam: ["ENEM", "ITA", "IME", "VESTIBULAR", "OUTRO"].includes(it.exam)
+            ? it.exam
+            : "OUTRO",
+          year: it.year ? Number(it.year) : new Date().getFullYear(),
+          tags: Array.isArray(it.tags) ? it.tags : [],
+          questionCode: it.questionCode,
+          source: it.source || "Import",
+          license: it.license || "",
+          sourceUrl: it.sourceUrl || "",
+          attribution: it.attribution || "",
+        });
+      } catch {
+        skipped++;
+      }
+    }
+
+    if (!docs.length)
+      return res.status(400).json({ error: "Nada válido para inserir." });
+
+    const result = await Question.insertMany(docs, { ordered: false });
+    res.json({ inserted: result.length, skipped });
+  } catch (e) {
+    console.error("Bulk import error:", e.message);
+    res.status(500).json({ error: "Falha no import em massa." });
+  }
+});
+
+// ======== IMPORTAR DO LIBRETEXTS/ADAPT ========
+app.post("/questions/import/adapt", auth, onlyProfessor, async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Envie 'items' (array) com questões." });
+    }
+
+    const htmlToText = (html) => {
+      if (!html) return "";
+      return String(html)
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+\n/g, "\n")
+        .replace(/\n{2,}/g, "\n")
+        .trim();
+    };
+
+    const normDifficulty = (d) =>
+      ["Fácil", "Médio", "Difícil"].includes(d) ? d : "Médio";
+    const safeExam = "OUTRO";
+
+    const docs = [];
+    let skipped = 0;
+
+    for (const it of items) {
+      try {
+        const statement = htmlToText(
+          it.question || it.statement || it.prompt || ""
+        );
+        if (!statement) {
+          skipped++;
+          continue;
+        }
+
+        const rawAnswers = Array.isArray(it.answers) ? it.answers : it.options;
+        if (!Array.isArray(rawAnswers) || rawAnswers.length === 0) {
+          skipped++;
+          continue;
+        }
+
+        const trimmed = rawAnswers
+          .slice(0, 5)
+          .map((a) => ({
+            text: htmlToText(a.text || a.html || a.value || a.label || ""),
+            correct: Boolean(a.is_correct || a.correct),
+          }))
+          .filter((a) => a.text);
+
+        if (trimmed.length < 2) {
+          skipped++;
+          continue;
+        }
+
+        let correctIndex = trimmed.findIndex((a) => a.correct);
+        if (correctIndex < 0) correctIndex = 0;
+
+        const letters = ["A", "B", "C", "D", "E"];
+        const options = {};
+        for (let i = 0; i < trimmed.length && i < letters.length; i++) {
+          options[letters[i]] = trimmed[i].text;
+        }
+
+        const qdoc = {
+          statement,
+          options,
+          correctAnswer: letters[correctIndex],
+          subject: (it.subject || "Assunto").trim(),
+          difficulty: normDifficulty(it.difficulty),
+          exam: safeExam,
+          year: it.year ? Number(it.year) : new Date().getFullYear(),
+          tags: Array.isArray(it.tags) ? it.tags : [],
+          questionCode: it.questionCode || it.code || "",
+          source: "LibreTexts/ADAPT",
+          license: it.license || "CC BY-NC-SA 4.0",
+          sourceUrl: it.url || it.sourceUrl || "",
+          attribution:
+            it.attribution ||
+            (it.title ? `LibreTexts/ADAPT – ${it.title}` : "LibreTexts/ADAPT"),
+        };
+
+        docs.push(qdoc);
+      } catch {
+        skipped++;
+      }
+    }
+
+    if (docs.length === 0) {
+      return res
+        .status(400)
+        .json({ error: "Nenhum item válido para importar.", skipped });
+    }
+
+    const inserted = await Question.insertMany(docs, { ordered: false });
+    res.status(201).json({ inserted: inserted.length, skipped });
+  } catch (e) {
+    console.error("Erro import/adapt:", e);
+    res.status(500).json({ error: "Falha ao importar do LibreTexts/ADAPT." });
   }
 });
 
@@ -886,6 +1107,10 @@ async function seedQuestionsIfNeeded() {
         year: 2019,
         tags: ["MRUV", "cinemática"],
         questionCode: "Q1",
+        source: "Seed",
+        license: "",
+        sourceUrl: "",
+        attribution: "",
       },
       {
         statement:
@@ -904,74 +1129,10 @@ async function seedQuestionsIfNeeded() {
         year: 2020,
         tags: ["lançamento horizontal", "gravidade"],
         questionCode: "Q2",
-      },
-      {
-        statement: "Força central atrativa ∝ 1/r² corresponde a:",
-        options: {
-          A: "Hooke",
-          B: "Gravitação Universal",
-          C: "Magnética",
-          D: "Arrasto",
-          E: "Elétrica cargas iguais",
-        },
-        correctAnswer: "B",
-        subject: "Gravitação",
-        difficulty: "Médio",
-        exam: "IME",
-        year: 2018,
-        tags: ["gravitação", "newton"],
-        questionCode: "IME-2018-12",
-      },
-      {
-        statement: "Em circuito RC transitório, a constante de tempo é:",
-        options: {
-          A: "τ = R/C",
-          B: "τ = C/R",
-          C: "τ = R·C",
-          D: "τ = 1/(R·C)",
-          E: "τ = R²·C",
-        },
-        correctAnswer: "C",
-        subject: "Eletrodinâmica",
-        difficulty: "Médio",
-        exam: "ITA",
-        year: 2017,
-        tags: ["RC", "transitório"],
-        questionCode: "ITA-2017-07",
-      },
-      {
-        statement: "Para ondas: v, f, λ. A relação correta é:",
-        options: {
-          A: "v = f/λ",
-          B: "v = λ/f",
-          C: "v = f·λ",
-          D: "v = 2πf·λ",
-          E: "v = λ²·f",
-        },
-        correctAnswer: "C",
-        subject: "Ondas",
-        difficulty: "Fácil",
-        exam: "VESTIBULAR",
-        year: 2016,
-        tags: ["ondas"],
-        questionCode: "VEST-2016-05",
-      },
-      {
-        statement: "Gás ideal a P constante: V é proporcional a:",
-        options: {
-          A: "Temperatura absoluta",
-          B: "Pressão",
-          C: "Massa",
-          D: "√T",
-          E: "1/T",
-        },
-        correctAnswer: "A",
-        subject: "Termologia",
-        difficulty: "Fácil",
-        exam: "ENEM",
-        year: 2015,
-        tags: ["gases ideais"],
-        questionCode: "ENEM-2015-33",
+        source: "Seed",
+        license: "",
+        sourceUrl: "",
+        attribution: "",
       },
     ];
     await Question.insertMany(sample);
