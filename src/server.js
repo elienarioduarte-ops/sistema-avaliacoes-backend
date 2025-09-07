@@ -1,5 +1,6 @@
 // server.js
 require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -7,6 +8,15 @@ const crypto = require("crypto");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+
+// Segurança e robustez
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const mongoSanitize = require("express-mongo-sanitize");
+const morgan = require("morgan");
+
+// Export .docx (opcional, já incluído)
+const { Document, Packer, Paragraph, TextRun } = require("docx");
 
 const app = express();
 
@@ -16,11 +26,33 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
-const JWT_SECRET = process.env.JWT_SECRET || "changeme";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!MONGODB_URI) {
+  console.error("❌ MONGODB_URI ausente no .env");
+  process.exit(1);
+}
+if (!JWT_SECRET) {
+  console.error("❌ JWT_SECRET ausente no .env");
+  process.exit(1);
+}
 
 /* Body parsers */
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
+
+/* Segurança (headers + sanitização) */
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+app.use(mongoSanitize());
+
+/* Logs HTTP (dev) */
+if (process.env.NODE_ENV !== "production") {
+  app.use(morgan("dev"));
+}
 
 /* =========================
    C O R S
@@ -54,18 +86,17 @@ app.options("*", cors());
    ARQUIVOS ESTÁTICOS
    ========================= */
 app.use(express.static(path.join(__dirname, "public")));
-app.use(
-  "/assets",
-  express.static(path.join(__dirname, "public", "assets"), {
-    fallthrough: true,
-  })
-);
+app.use("/assets", express.static(path.join(__dirname, "public", "assets")));
 
 /* =========================
    CONEXÃO AO MONGODB
    ========================= */
 mongoose
-  .connect(MONGODB_URI, { autoIndex: true })
+  .connect(MONGODB_URI, {
+    autoIndex: true,
+    serverSelectionTimeoutMS: 10000,
+    maxPoolSize: 20,
+  })
   .then(() => console.log("✅ MongoDB conectado"))
   .catch((err) => {
     console.error("❌ Erro ao conectar ao MongoDB:", err.message);
@@ -192,7 +223,22 @@ const QuestionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+// Índice textual para busca por "search"
+QuestionSchema.index({ statement: "text", tags: "text" });
+
 const Question = mongoose.model("Question", QuestionSchema);
+
+/* Garantir índices após conexão */
+mongoose.connection.on("open", async () => {
+  await Promise.all([
+    User.init(),
+    Question.init(),
+    Assessment.init(),
+    AnswerKey.init(),
+    StudentAnswer.init(),
+    Form.init(),
+  ]);
+});
 
 /* =========================
    HELPERS / MIDDLEWARES
@@ -219,30 +265,18 @@ function onlyProfessor(req, res, next) {
     return res.status(403).json({ error: "Apenas professores." });
   next();
 }
+const isId = (v) => mongoose.Types.ObjectId.isValid(v);
 
-async function getLatestAssessmentBundle() {
-  const assessment = await Assessment.findOne().sort({ createdAt: -1 }).lean();
-  if (!assessment)
-    return { assessment: null, answerKey: null, studentAnswers: [] };
-
-  const answerKey = await AnswerKey.findOne({ assessmentId: assessment._id })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  const studentAnswers = await StudentAnswer.find({
-    assessmentId: assessment._id,
-  })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  return { assessment, answerKey: answerKey?.answers || null, studentAnswers };
-}
-function recomputeIsCorrect(answers, keyMap) {
-  return answers.map((a) => ({
-    ...a,
-    isCorrect: keyMap.get(a.questionNumber) === a.answer,
-  }));
-}
+/* =========================
+   RATE LIMIT /auth
+   ========================= */
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use("/auth", authLimiter);
 
 /* =========================
    R O T A S   P Ú B L I C A S
@@ -260,7 +294,9 @@ app.post("/auth/signup", async (req, res) => {
     if (!name || !email || !password)
       return res.status(400).json({ error: "Dados obrigatórios ausentes." });
 
-    const exists = await User.findOne({ email });
+    const exists = await User.findOne({
+      email: (email || "").toLowerCase().trim(),
+    });
     if (exists) return res.status(409).json({ error: "E-mail já cadastrado." });
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -358,7 +394,6 @@ app.get("/questions", auth, async (req, res) => {
     } = req.query;
 
     const q = {};
-    if (search) q.statement = { $regex: new RegExp(search, "i") };
     if (subject) q.subject = { $regex: new RegExp(subject, "i") };
     if (difficulty) q.difficulty = difficulty;
     if (exam) q.exam = exam;
@@ -368,14 +403,29 @@ app.get("/questions", auth, async (req, res) => {
     const pg = Math.max(parseInt(page) || 1, 1);
     const lim = Math.min(Math.max(parseInt(limit) || 10, 1), 50);
 
-    const [items, total] = await Promise.all([
-      Question.find(q)
-        .sort({ year: -1, createdAt: -1 })
+    let items, total;
+    if (search) {
+      // Busca textual por índice
+      const query = Question.find({ ...q, $text: { $search: search } })
+        .select({ score: { $meta: "textScore" } })
+        .sort({ score: { $meta: "textScore" } })
         .skip((pg - 1) * lim)
         .limit(lim)
-        .lean(),
-      Question.countDocuments(q),
-    ]);
+        .lean();
+      [items, total] = await Promise.all([
+        query,
+        Question.countDocuments({ ...q, $text: { $search: search } }),
+      ]);
+    } else {
+      [items, total] = await Promise.all([
+        Question.find(q)
+          .sort({ year: -1, createdAt: -1 })
+          .skip((pg - 1) * lim)
+          .limit(lim)
+          .lean(),
+        Question.countDocuments(q),
+      ]);
+    }
 
     res.json({
       items,
@@ -394,8 +444,30 @@ app.get("/questions", auth, async (req, res) => {
    ========================= */
 app.get("/all-data", auth, async (req, res) => {
   try {
-    const bundle = await getLatestAssessmentBundle();
-    res.json(bundle);
+    const assessment = await Assessment.findOne()
+      .sort({ createdAt: -1 })
+      .lean();
+    if (!assessment)
+      return res.json({
+        assessment: null,
+        answerKey: null,
+        studentAnswers: [],
+      });
+
+    const answerKey = await AnswerKey.findOne({ assessmentId: assessment._id })
+      .sort({ createdAt: -1 })
+      .lean();
+    const studentAnswers = await StudentAnswer.find({
+      assessmentId: assessment._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.json({
+      assessment,
+      answerKey: answerKey?.answers || null,
+      studentAnswers,
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro ao carregar dados." });
@@ -431,6 +503,9 @@ app.post("/assessments/from-bank", auth, onlyProfessor, async (req, res) => {
     const { name, questionIds } = req.body;
     if (!name || !Array.isArray(questionIds) || questionIds.length === 0) {
       return res.status(400).json({ error: "Dados inválidos para builder." });
+    }
+    if (!questionIds.every(isId)) {
+      return res.status(400).json({ error: "IDs de questões inválidos." });
     }
 
     const questions = await Question.find({ _id: { $in: questionIds } }).lean();
@@ -475,7 +550,12 @@ app.post("/assessments/from-bank", auth, onlyProfessor, async (req, res) => {
 app.post("/answer-keys", auth, onlyProfessor, async (req, res) => {
   try {
     const { assessmentId, answers } = req.body;
-    if (!assessmentId || !Array.isArray(answers) || !answers.length) {
+    if (
+      !assessmentId ||
+      !isId(assessmentId) ||
+      !Array.isArray(answers) ||
+      !answers.length
+    ) {
       return res.status(400).json({ error: "Gabarito inválido." });
     }
     const exists = await Assessment.exists({ _id: assessmentId });
@@ -493,7 +573,12 @@ app.post("/answer-keys", auth, onlyProfessor, async (req, res) => {
 app.post("/student-answers", auth, async (req, res) => {
   try {
     const { assessmentId, studentName, answers } = req.body;
-    if (!assessmentId || !studentName || !Array.isArray(answers)) {
+    if (
+      !assessmentId ||
+      !isId(assessmentId) ||
+      !studentName ||
+      !Array.isArray(answers)
+    ) {
       return res.status(400).json({ error: "Dados de respostas inválidos." });
     }
 
@@ -508,14 +593,16 @@ app.post("/student-answers", auth, async (req, res) => {
     const keyMap = new Map(
       keyDoc.answers.map((k) => [k.questionNumber, k.correctAnswer])
     );
-    const normalized = recomputeIsCorrect(answers, keyMap);
+    const normalized = answers.map((a) => ({
+      ...a,
+      isCorrect: keyMap.get(a.questionNumber) === a.answer,
+    }));
 
     const saved = await StudentAnswer.create({
       assessmentId,
       studentName,
       answers: normalized,
     });
-
     res.status(201).json(saved);
   } catch (e) {
     console.error(e);
@@ -526,12 +613,12 @@ app.post("/student-answers", auth, async (req, res) => {
 });
 
 /* =========================
-   FORM ONLINE
+   FORM ONLINE (público)
    ========================= */
 app.post("/forms", auth, onlyProfessor, async (req, res) => {
   try {
     const { assessmentId, title, description, requireName } = req.body;
-    if (!assessmentId)
+    if (!assessmentId || !isId(assessmentId))
       return res.status(400).json({ error: "assessmentId é obrigatório." });
 
     const exists = await Assessment.exists({ _id: assessmentId });
@@ -597,9 +684,7 @@ app.get("/form/:formId", async (req, res) => {
   <form method="POST" action="${BASE_URL}/form/${form.formId}/submit">
     ${
       form.requireName
-        ? `<div style="margin:12px 0">
-             <label>Nome do aluno: <input name="studentName" required style="padding:8px"/></label>
-           </div>`
+        ? `<div style="margin:12px 0"><label>Nome do aluno: <input name="studentName" required style="padding:8px"/></label></div>`
         : `<input type="hidden" name="studentName" value="Anônimo"/>`
     }
     ${questions}
@@ -693,17 +778,89 @@ app.delete("/clear-data", auth, onlyProfessor, async (req, res) => {
   }
 });
 
+// /users paginado (somente professor)
 app.get("/users", auth, onlyProfessor, async (req, res) => {
   try {
-    const users = await User.find({}, { passwordHash: 0 })
-      .sort({ createdAt: -1 })
-      .lean();
-    res.json(users);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+
+    const [items, total] = await Promise.all([
+      User.find({}, { passwordHash: 0 })
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(),
+    ]);
+
+    res.json({ items, total, page, pages: Math.ceil(total / limit) });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro ao listar usuários." });
   }
 });
+
+/* =========================
+   EXPORT .DOCX (opcional)
+   ========================= */
+app.get(
+  "/assessments/:id/export/docx",
+  auth,
+  onlyProfessor,
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!isId(id)) return res.status(400).json({ error: "ID inválido" });
+
+      const assessment = await Assessment.findById(id).lean();
+      const key = await AnswerKey.findOne({ assessmentId: id }).lean();
+      if (!assessment || !key)
+        return res
+          .status(404)
+          .json({ error: "Avaliação/gabarito não encontrados" });
+
+      const doc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: assessment.name, bold: true, size: 32 }),
+                ],
+              }),
+              ...assessment.questions.map(
+                (q) =>
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `Q${q.number} - ${q.subject}`,
+                        size: 24,
+                      }),
+                    ],
+                  })
+              ),
+            ],
+          },
+        ],
+      });
+
+      const buffer = await Packer.toBuffer(doc);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="prova-${assessment._id}.docx"`
+      );
+      res.send(buffer);
+    } catch (e) {
+      console.error(e);
+      res.status(500).json({ error: "Falha ao exportar .docx" });
+    }
+  }
+);
 
 /* =========================
    SEED (opcional)
