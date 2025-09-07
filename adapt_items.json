@@ -1,63 +1,22 @@
-// import_adapt.js  (Node 16 + node-fetch@2)
-// Uso: node import_adapt.js adapt_items.json https://api.fisicaava.online SEU_TOKEN_JWT
-
-const fs = require("fs");
-const path = require("path");
-const fetch = require("node-fetch"); // v2
-
-async function main() {
-  const [filePath, apiBase, token] = process.argv.slice(2);
-  if (!filePath || !apiBase || !token) {
-    console.log("Uso: node import_adapt.js <arquivo.json> <API_BASE> <TOKEN>");
-    process.exit(1);
-  }
-
-  const abs = path.resolve(filePath);
-  if (!fs.existsSync(abs)) {
-    console.error("Arquivo não encontrado:", abs);
-    process.exit(1);
-  }
-
-  let fileJson;
-  try {
-    fileJson = JSON.parse(fs.readFileSync(abs, "utf8"));
-  } catch (e) {
-    console.error("JSON inválido:", e.message);
-    process.exit(1);
-  }
-
-  // Aceita {items:[...]} ou apenas [...]
-  const payload = Array.isArray(fileJson)
-    ? { items: fileJson }
-    : (Array.isArray(fileJson.items) ? { items: fileJson.items } : null);
-
-  if (!payload || payload.items.length === 0) {
-    console.error('Nada para importar: forneça { "items": [ ... ] }');
-    process.exit(1);
-  }
-
-  const url = `${apiBase.replace(/\/+$/, "")}/questions/import/adapt`;
-
-  try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(payload)
-    });
-
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      console.error("Erro da API:", res.status, data);
-      process.exit(1);
+{
+  "items": [
+    {
+      "title": "Queda livre – velocidade após t",
+      "url": "https://libretexts.org/exemplo/atividade-queda-livre",
+      "license": "CC BY-NC-SA 4.0",
+      "attribution": "Autor(a) – LibreTexts/ADAPT",
+      "subject": "Cinemática",
+      "difficulty": "Médio",
+      "tags": ["queda livre", "MRUV"],
+      "questionCode": "LT-QL-001",
+      "year": 2025,
+      "question": "<p>Um corpo é abandonado do repouso sob gravidade g. Após tempo t, a velocidade é:</p>",
+      "answers": [
+        { "text": "<p>v = g·t</p>", "is_correct": true },
+        { "text": "<p>v = g/t</p>", "is_correct": false },
+        { "text": "<p>v = 2g·t</p>", "is_correct": false },
+        { "text": "<p>v = g·t²</p>", "is_correct": false }
+      ]
     }
-    console.log("Importação concluída:", data);
-  } catch (e) {
-    console.error("Falha na requisição:", e.message);
-    process.exit(1);
-  }
+  ]
 }
-
-main();
