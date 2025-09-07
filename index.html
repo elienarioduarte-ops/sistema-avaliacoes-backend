@@ -26,6 +26,9 @@
         --success-color: #00b894;
         --danger-color: #ff6b6b;
         --form-color: #5a7dff;
+
+        /* NOVO: URL da imagem de fundo vinda do /public em prod */
+        --bg-image-url: url("/assets/fundo-estrelado.png");
       }
       * {
         margin: 0;
@@ -36,10 +39,18 @@
       body {
         min-height: 100vh;
         color: var(--text-color);
+        /* NOVO: aplica a imagem com gradiente; se falhar, JS colocará .bg-fallback */
         background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)),
-          url("assets/fundo-estrelado.png") center/cover no-repeat fixed;
+          var(--bg-image-url) center/cover no-repeat fixed;
         padding: 20px;
       }
+      /* NOVO: fallback visual (se a imagem local falhar) */
+      body.bg-fallback {
+        background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)),
+          url("https://images.unsplash.com/photo-1444703686981-a3abbc4d4fe3?q=80&w=1600&auto=format&fit=crop")
+            center/cover no-repeat fixed;
+      }
+
       .wrap {
         max-width: 1200px;
         margin: 0 auto;
@@ -739,8 +750,9 @@
                 <input id="qb-year" type="number" placeholder="Ano" />
                 <input id="qb-tag" placeholder="Tag (ex: MRUV)" />
               </div>
-              <div class="actions" style="margin-bottom: 10px">
+              <div class="actions" style="margin-bottom: 10px; flex-wrap: wrap">
                 <button class="btn" onclick="qbClearFilters()">Limpar</button>
+                <button class="btn" onclick="qbShowAll()">Mostrar tudo</button>
                 <button class="btn primary" onclick="qbFetch(1)">Buscar</button>
               </div>
               <div
@@ -961,6 +973,19 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
       /* ===================== CONFIG ===================== */
       const API_URL = "https://api.fisicaava.online"; // em dev: "http://localhost:5000"
 
+      /* ===== NOVO: verifica se a imagem de fundo local carrega, senão aplica fallback ===== */
+      (function ensureBgLoads() {
+        const test = new Image();
+        test.onload = () => {
+          /* ok */
+        };
+        test.onerror = () => {
+          document.body.classList.add("bg-fallback");
+        };
+        // mesmo path do CSS (raiz do site na produção)
+        test.src = "/assets/fundo-estrelado.png";
+      })();
+
       /* ===================== AUX AUTH ===================== */
       const screenHome = document.getElementById("screen-home");
       const screenAuth = document.getElementById("screen-auth");
@@ -977,7 +1002,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         if (where === "app") screenApp.classList.remove("hidden");
       }
 
-      // (ATUALIZADO) alterna telas de Login/Cadastro
       function switchAuth(mode) {
         go("auth");
         document.getElementById("auth-title").textContent =
@@ -1017,72 +1041,18 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         return res;
       }
 
-      function chooseRoleThenSave() {
-        return new Promise((resolve) => {
-          const overlay = document.createElement("div");
-          overlay.style.cssText =
-            "position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999";
-          const box = document.createElement("div");
-          box.className = "glass";
-          box.style.maxWidth = "520px";
-          box.innerHTML = `
-          <h2 style="margin-top:0">Selecione seu perfil</h2>
-          <p class="subtitle">Escolha para continuar</p>
-          <div class="actions" style="gap:12px;margin-top:10px">
-            <button class="btn primary" id="r-aluno">Sou Aluno</button>
-            <button class="btn" id="r-prof">Sou Professor</button>
-          </div>
-          <div class="actions" style="margin-top:10px"><button class="btn" id="r-cancel">Cancelar</button></div>`;
-          overlay.appendChild(box);
-          document.body.appendChild(overlay);
-          const done = (v) => {
-            document.body.removeChild(overlay);
-            resolve(v || null);
-          };
-          box.querySelector("#r-aluno").onclick = async () => {
-            const ok = await saveRole("aluno");
-            if (ok) done("aluno");
-          };
-          box.querySelector("#r-prof").onclick = async () => {
-            const ok = await saveRole("professor");
-            if (ok) done("professor");
-          };
-          box.querySelector("#r-cancel").onclick = () => done(null);
-        });
-      }
-      async function saveRole(r) {
-        try {
-          const res = await authFetch("/me/role", {
-            method: "POST",
-            body: JSON.stringify({ role: r }),
-          });
-          const data = await res.json();
-          if (!res.ok) {
-            alert(data?.error || "Não foi possível salvar o perfil");
-            return false;
-          }
-          localStorage.setItem("user", JSON.stringify(data.user));
-          return true;
-        } catch (e) {
-          console.error(e);
-          alert("Erro ao salvar perfil");
-          return false;
-        }
-      }
-
-      /* ===================== AUTH HANDLERS (NOVO) ===================== */
+      /* ===================== AUTH HANDLERS ===================== */
       formSignup.onsubmit = async (e) => {
         e.preventDefault();
         const name = document.getElementById("name").value.trim();
         const email = document.getElementById("email2").value.trim();
         const password = document.getElementById("password2").value;
-        const roleSel = document.getElementById("role2").value; // "aluno" | "professor"
+        const roleSel = document.getElementById("role2").value;
 
         if (!name || !email || !password) {
           alert("Preencha nome, e-mail e senha.");
           return;
         }
-
         try {
           const res = await fetch(`${API_URL}/auth/signup`, {
             method: "POST",
@@ -1091,7 +1061,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            console.error("SIGNUP FAIL:", res.status, data);
             alert(data?.error || `Falha no cadastro (${res.status})`);
             return;
           }
@@ -1116,7 +1085,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           alert("Preencha e-mail e senha.");
           return;
         }
-
         try {
           const res = await fetch(`${API_URL}/auth/login`, {
             method: "POST",
@@ -1125,7 +1093,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            console.error("LOGIN FAIL:", res.status, data);
             alert(data?.error || `Falha no login (${res.status})`);
             return;
           }
@@ -1207,7 +1174,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         document.getElementById("role-badge").textContent = r
           ? r.toUpperCase()
           : "—";
-        // Desabilitar cards do aluno
+
         const profOnly = [
           "card-create-assessment",
           "card-insert-key",
@@ -1226,7 +1193,6 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         updateDashboardCards();
         updateStatus();
 
-        // listeners
         assessmentForm.onsubmit = handleAssessmentSubmit;
         studentForm.onsubmit = handleStudentSubmit;
         saveKeyBtn.onclick = handleSaveKey;
@@ -1236,9 +1202,7 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           generateQuestionFields;
         tabButtons.forEach((tab) => (tab.onclick = handleTabClick));
 
-        if (r === "professor") {
-          qbFetch(1);
-        }
+        if (r === "professor") qbFetch(1);
       }
 
       async function fetchInitialData() {
@@ -1909,8 +1873,8 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
           }
           <div>${currentAssessment.questions
             .map(
-              (q) =>
-                `<div class="question-preview" style="background:rgba(255,255,255,.05);padding:10px;border-radius:10px;margin:8px 0">
+              (q) => `
+            <div class="question-preview" style="background:rgba(255,255,255,.05);padding:10px;border-radius:10px;margin:8px 0">
               <h4>Questão ${q.number} - ${q.subject}</h4>
               <div class="options-container">
                 ${["A", "B", "C", "D", "E"]
@@ -1922,15 +1886,16 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
               </div>
             </div>`
             )
-            .join("")}</div>
+            .join("")}
+          </div>
           <p style="margin-top:8px"><strong>Link público:</strong> <a href="${onlineFormLink}" target="_blank">${onlineFormLink}</a></p></div>`;
       }
       async function copyFormLink() {
         try {
           if (!onlineFormLink) return;
-          if (navigator.clipboard?.writeText) {
+          if (navigator.clipboard?.writeText)
             await navigator.clipboard.writeText(onlineFormLink);
-          } else {
+          else {
             formLink.select();
             document.execCommand("copy");
           }
@@ -1941,17 +1906,25 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
       }
 
       /* ===================== BANCO DE QUESTÕES ===================== */
+      // NOVO: normaliza (trim) e evita sujeira
+      function cleanStr(v) {
+        return (v || "").toString().trim();
+      }
+
       function qbBuildQuery(page) {
         const params = new URLSearchParams();
-        if (qbEls.search.value.trim())
-          params.set("search", qbEls.search.value.trim());
-        if (qbEls.subject.value.trim())
-          params.set("subject", qbEls.subject.value.trim());
-        if (qbEls.difficulty.value)
-          params.set("difficulty", qbEls.difficulty.value);
-        if (qbEls.exam.value) params.set("exam", qbEls.exam.value);
-        if (qbEls.year.value) params.set("year", qbEls.year.value);
-        if (qbEls.tag.value.trim()) params.set("tag", qbEls.tag.value.trim());
+        if (cleanStr(qbEls.search.value))
+          params.set("search", cleanStr(qbEls.search.value));
+        if (cleanStr(qbEls.subject.value))
+          params.set("subject", cleanStr(qbEls.subject.value));
+        if (cleanStr(qbEls.difficulty.value))
+          params.set("difficulty", cleanStr(qbEls.difficulty.value));
+        if (cleanStr(qbEls.exam.value))
+          params.set("exam", cleanStr(qbEls.exam.value));
+        if (cleanStr(qbEls.year.value))
+          params.set("year", cleanStr(qbEls.year.value));
+        if (cleanStr(qbEls.tag.value))
+          params.set("tag", cleanStr(qbEls.tag.value));
         params.set("page", page || qbPage);
         params.set("limit", qbLimit);
         return params.toString();
@@ -2039,6 +2012,10 @@ Preencha o formulário com suas respostas. Cada questão vale 1 ponto.</textarea
         qbEls.year.value = "";
         qbEls.tag.value = "";
         qbFetch(1);
+      }
+      // NOVO: botão “Mostrar tudo”
+      function qbShowAll() {
+        qbClearFilters(); // já chama qbFetch(1)
       }
 
       /* ===================== BUILDER ===================== */

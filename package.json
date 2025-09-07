@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "import:adapt:file": "node scripts/import_from_adapt.js --file .\\adapt_items.json",
+    "import:adapt:urls": "node scripts/import_from_adapt.js --urls"
   },
   "keywords": [],
   "author": "Elienario",
@@ -29,10 +31,5 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.0"
-  }
-  {
-  "scripts": {
-    "import:adapt:file": "node scripts/import_from_adapt.js --file .\\adapt_items.json",
-    "import:adapt:urls": "node scripts/import_from_adapt.js --urls"
   }
 }
